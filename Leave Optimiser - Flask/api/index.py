@@ -17,6 +17,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 client = None
 if GEMINI_API_KEY:
     try:
+        # Initializing the new SDK client for reasoning-capable models
         client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         print(f"⚠️ SDK Init Error: {e}")
@@ -25,7 +26,7 @@ else:
 
 CITY_CACHE = {}
 
-# --- SMART GUIDE ---
+# --- SMART GUIDE (Reasoning-Capable Gemini 3 Flash) ---
 def get_travel_guide(city):
     cache_key = city.lower().strip()
     if cache_key in CITY_CACHE: return CITY_CACHE[cache_key]
@@ -33,22 +34,24 @@ def get_travel_guide(city):
     def error_guide(msg):
         return {
             "see": [{"title": "⚠️ Guide Unavailable", "desc": msg}], 
-            "eat": [{"title": "Connection Error", "desc": "Please check API Key or Model."}]
+            "eat": [{"title": "Connection Error", "desc": "Check API Key status."}]
         }
 
     if not client: return error_guide("API Key missing.")
 
     try:
-        # Prompt optimized for speed (concise)
+        # Prompt optimized for Gemini 3's reasoning behavior
         prompt = f"""
-        Singaporean tourist visiting {city}. 
-        Return JSON with keys "see" (3 sights) and "eat" (3 foods).
-        Format: {{ "see": [{{"title": "...", "desc": "..."}}], "eat": [...] }}
-        Descriptions max 12 words. Raw JSON only.
+        I am a Singaporean tourist visiting {city}. 
+        Return a valid JSON object with:
+        "see": List of 3 top tourist attractions (dictionaries with "title" and "desc").
+        "eat": List of 3 famous local foods (dictionaries with "title" and "desc").
+        Keep descriptions under 12 words. Return ONLY raw JSON.
         """
         
+        # Using the advanced gemini-3-flash-preview model
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model='gemini-3-flash-preview',
             contents=prompt
         )
         
@@ -80,9 +83,9 @@ def calc_budget(lat1, lon1, lat2, lon2):
         c = 2 * asin(sqrt(a))
         dist = int(R * c)
         
-        if dist < 1500: return dist, "Low ($)"       # KL, Penang, Phuket
-        elif dist < 4500: return dist, "Med ($$)"    # Hong Kong, Taiwan, Perth
-        else: return dist, "High ($$$)"              # Japan, Europe, USA
+        if dist < 1500: return dist, "Low ($)"
+        elif dist < 4500: return dist, "Med ($$)"
+        else: return dist, "High ($$$)"
     except: return 0, "-"
 
 # --- ROUTES ---
@@ -105,73 +108,64 @@ def plan_trip():
     data = request.json
     year = int(data.get('year'))
     city = data['to']['name']
-    
-    # 1. Math Calculations (Fast)
     f_lat, f_lng = data['from']['latitude'], data['from']['longitude']
     t_lat, t_lng = data['to']['latitude'], data['to']['longitude']
     
     weather = get_weather(t_lat, t_lng)
     dist_val, budget = calc_budget(f_lat, f_lng, t_lat, t_lng)
     
-    # 2. Smart Duration Logic (The "AI" Brain)
-    # If far away (>4000km), "Quick" trip should be longer (e.g. 6 days)
+    # SMART DURATION: If long haul (>4000km), automatically suggest a longer stay
     is_long_haul = dist_val > 4000 
-    
-    # 3. AI Guide (Slow - takes ~2-3s)
     guide = get_travel_guide(city)
 
     holidays = []
     try:
         h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
         h_data = requests.get(h_url).json()
-        
         for h in h_data:
             dt = datetime.strptime(h['date'], "%Y-%m-%d")
             weekday = dt.weekday()
             
-            # --- SMART STRATEGY ---
             l_leaves, l_off = 0, 3
             l_start, l_end = dt, dt
             l_rec = "No leave needed"
 
-            # Base Logic: Standard Long Weekend (Sat-Mon or Fri-Sun)
-            if weekday == 0: # Mon holiday -> Sat-Mon
+            if weekday == 0: # Monday holiday
                 l_start, l_end = dt - timedelta(days=2), dt
-            elif weekday == 4: # Fri holiday -> Fri-Sun
+            elif weekday == 4: # Friday holiday
                 l_start, l_end = dt, dt + timedelta(days=2)
-            elif weekday == 1: # Tue -> Take Mon
+            elif weekday == 1: # Tuesday
                 l_start, l_end = dt - timedelta(days=3), dt
                 l_leaves, l_off = 1, 4
-                l_rec = f"Take {(dt - timedelta(days=1)).strftime('%a %d')}"
-            elif weekday == 3: # Thu -> Take Fri
+                l_rec = f"Take leave on {(dt - timedelta(days=1)).strftime('%a %d %b')}"
+            elif weekday == 3: # Thursday
                 l_start, l_end = dt, dt + timedelta(days=3)
                 l_leaves, l_off = 1, 4
-                l_rec = f"Take {(dt + timedelta(days=1)).strftime('%a %d')}"
-            else: # Wed or Weekend -> Standard
-                l_start, l_end = dt, dt
-            
-            # AI UPGRADE: If Long Haul, extend the "Quick" trip
+                l_rec = f"Take leave on {(dt + timedelta(days=1)).strftime('%a %d %b')}"
+            elif weekday == 2: # Wednesday
+                l_start, l_end = dt, dt + timedelta(days=4)
+                l_leaves, l_off = 2, 5
+                d1 = (dt + timedelta(days=1)).strftime('%a %d %b')
+                d2 = (dt + timedelta(days=2)).strftime('%a %d %b')
+                l_rec = f"Take leave on {d1} and {d2}"
+
             if is_long_haul:
-                # Add 2 more buffer days (e.g. Turn 4 days into 6 days)
-                l_end = l_end + timedelta(days=2)
+                l_end += timedelta(days=2)
                 l_leaves += 2
                 l_off += 2
-                l_rec += " + 2 Days"
+                l_rec += " plus 2 extra days for travel"
 
             l_range = f"{l_start.strftime('%d %b')} - {l_end.strftime('%d %b')}"
-
-            # Shiok Strategy (Always 9 days)
+            
             mon_of_week = dt - timedelta(days=weekday)
-            s_start = mon_of_week - timedelta(days=2)
-            s_end = mon_of_week + timedelta(days=6)
-            s_range = f"{s_start.strftime('%d %b')} - {s_end.strftime('%d %b')}"
+            s_range = f"{(mon_of_week - timedelta(days=2)).strftime('%d %b')} - {(mon_of_week + timedelta(days=6)).strftime('%d %b')}"
 
             holidays.append({
                 "name": h['localName'],
                 "date": dt.strftime("%d %b"),
                 "strategies": {
                     "lobang": {"range": l_range, "off": l_off, "leaves": l_leaves, "rec": l_rec},
-                    "shiok": {"range": s_range, "off": 9, "leaves": 4, "rec": "Clear week"}
+                    "shiok": {"range": s_range, "off": 9, "leaves": 4, "rec": "Clear the entire week"}
                 }
             })
     except Exception as e: print(e)
@@ -186,4 +180,3 @@ def plan_trip():
 
 if __name__ == '__main__':
     app.run(debug=True)
-
