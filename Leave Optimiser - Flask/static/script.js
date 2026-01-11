@@ -2,27 +2,21 @@ let currentHolidays = [];
 let currentStrategy = 'lobang';
 let selectedCity = null;
 
-// 1. Initialize Search Listener
 document.addEventListener('DOMContentLoaded', () => {
     const input = document.getElementById('toInput');
     if (input) {
         input.addEventListener('input', (e) => {
             const val = e.target.value;
-            if (val.length > 2) {
-                searchCity(val);
-            } else {
-                document.getElementById('toList').style.display = 'none';
-            }
+            if (val.length > 2) searchCity(val);
+            else document.getElementById('toList').style.display = 'none';
         });
     }
 });
 
-// 2. Search Logic
 async function searchCity(query) {
     try {
         const res = await fetch(`/api/search?q=${query}`);
         const data = await res.json();
-        
         const list = document.getElementById('toList');
         list.innerHTML = '';
         
@@ -40,19 +34,22 @@ async function searchCity(query) {
                 list.appendChild(item);
             });
             list.style.display = 'block';
-        } else {
-            list.style.display = 'none';
-        }
+        } else { list.style.display = 'none'; }
     } catch (e) { console.error(e); }
 }
 
-// 3. Generate Plan
 async function generatePlan(cityData) {
     document.getElementById('dashboard').classList.remove('hidden');
-    // Loading State
-    document.getElementById('eatList').innerHTML = '<div style="color:#94A3B8; padding:10px;">🦁 Loading...</div>';
-    document.getElementById('seeList').innerHTML = '<div style="color:#94A3B8; padding:10px;">✈️ Planning...</div>';
+    
+    // 1. UPDATE HEADER IMMEDIATELY (Fixes SIN -> DEST bug)
+    const tripHeader = document.querySelector('.trip-header p'); // Selector for "SIN -> DEST"
+    if(tripHeader) tripHeader.innerText = `Singapore → ${cityData.name}`;
 
+    // 2. SHOW LOADING STATE
+    document.getElementById('eatList').innerHTML = '<div style="padding:20px; opacity:0.6">🦁 AI is hunting for food...</div>';
+    document.getElementById('seeList').innerHTML = '<div style="padding:20px; opacity:0.6">🌏 Calculating best route...</div>';
+    document.getElementById('dateRange').innerText = "Calculating...";
+    
     const payload = {
         year: document.getElementById('year').value,
         leavesLeft: document.getElementById('leaves').value,
@@ -70,21 +67,18 @@ async function generatePlan(cityData) {
         const data = await res.json();
         currentHolidays = data.holidays;
         
-        // --- FIX: Budget Display ---
+        // Update Stats
         document.getElementById('weatherVal').innerText = data.weather;
-        // Using direct values now, no array indexing [1]
-        document.getElementById('budgetVal').innerText = data.budget; 
+        document.getElementById('budgetVal').innerText = data.budget;
         document.getElementById('distVal').innerText = data.dist;
 
         renderGuide(data.guide);
         renderHolidayNav();
-
         if (currentHolidays.length > 0) selectHoliday(0);
 
     } catch (e) { console.error(e); }
 }
 
-// 4. Render UI
 function renderHolidayNav() {
     const container = document.getElementById('holidayNav');
     container.innerHTML = '';
@@ -109,13 +103,13 @@ function selectHoliday(index) {
     document.getElementById('daysOffVal').innerText = `${strategy.off} Days Off`;
     document.getElementById('leavesVal').innerText = strategy.leaves;
     
-    // --- FIX: Update Recommendation Text ---
+    // Update Recommendation Text
     const recText = document.querySelector('.stat-box.leaves .sub');
     if (recText) {
         if (strategy.rec) {
-            recText.innerText = strategy.rec; // Shows "Take leave on..."
+            recText.innerText = strategy.rec; 
             recText.style.color = strategy.leaves > 0 ? '#F87171' : '#64748B';
-            recText.style.fontSize = '0.85rem';
+            recText.style.fontSize = '0.8rem';
         } else {
             recText.innerText = 'Leaves Used';
         }
