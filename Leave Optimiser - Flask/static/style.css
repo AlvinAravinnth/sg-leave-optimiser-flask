@@ -21,8 +21,14 @@ h1 { color: #38BDF8; margin-bottom: 5px; }
     flex-wrap: wrap; /* Prevents squashing on small screens */
 }
 
-.input-group { display: flex; flex-direction: column; position: relative;}
-.sm { flex: 1; min-width: 150px; } /* Fixes the tiny input issue */
+/* --- THE FIX IS HERE --- */
+.input-group { 
+    display: flex; 
+    flex-direction: column;
+    position: relative; /* This keeps the suggestions attached to the box */
+}
+
+.sm { flex: 1; min-width: 150px; }
 .lg { flex: 2; min-width: 250px; }
 
 label { 
@@ -35,7 +41,7 @@ input, select {
     width: 100%; padding: 14px 16px; 
     background: #0F172A; border: 1px solid #334155; 
     border-radius: 8px; color: white; font-size: 16px;
-    box-sizing: border-box; /* Crucial for layout */
+    box-sizing: border-box; 
     outline: none; transition: border-color 0.2s;
 }
 input:focus, select:focus { border-color: #38BDF8; }
@@ -73,9 +79,12 @@ input:focus, select:focus { border-color: #38BDF8; }
 .guide-title { color: #38BDF8; font-weight: 700; display: block; margin-bottom: 5px; }
 .guide-desc { color: #CBD5E1; font-size: 13px; line-height: 1.5; }
 
-/* Suggestions */
+/* Suggestions Dropdown */
 .suggestions {
-    position: absolute; width: 100%; top: 100%; left: 0;
+    position: absolute; 
+    width: 100%; 
+    top: 100%; /* Pushes it right below the input */
+    left: 0;
     background: #1E293B; border: 1px solid #334155;
     z-index: 50; border-radius: 8px; overflow: hidden; margin-top: 5px;
 }
@@ -83,10 +92,44 @@ input:focus, select:focus { border-color: #38BDF8; }
 .suggestion-item:hover { background: #38BDF8; color: #0f172a; }
 
 /* Strategy Toggle */
-.toggle-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 15px; }
-.toggle-btn {
-    background: #0F172A; border: 1px solid #334155; color: #94A3B8;
-    padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-left: 5px;
-}
-.toggle-btn.active { background: #38BDF8; color: #0F172A; border-color: #38BDF8; }
+.toggle-container { display: flex; align-items: center; gap: 10px; }
+.switch-label { margin: 0; color: #94A3B8; font-size: 12px; }
 
+.strategy-toggle {
+    background: #0F172A;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 3px;
+    display: flex;
+}
+.strategy-toggle button {
+    background: transparent;
+    border: none;
+    color: #94A3B8;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+}
+.strategy-toggle button.active {
+    background: #38BDF8;
+    color: #0F172A;
+    border-color: #38BDF8;
+}
+
+/* Navigation Pills */
+.holiday-nav { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 30px; }
+.holiday-nav button {
+    background: #1E293B; color: #94A3B8; border: 1px solid #334155;
+    padding: 8px 16px; border-radius: 20px; cursor: pointer; transition: all 0.2s;
+}
+.holiday-nav button:hover, .holiday-nav button.active {
+    background: #334155; color: white; border-color: #38BDF8;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) { 
+    .dashboard { grid-template-columns: 1fr; } 
+    .row { flex-direction: column; } 
+}
