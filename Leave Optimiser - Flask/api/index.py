@@ -19,8 +19,10 @@ def search_internet_for_guide(city):
         sights_results = ddgs.text(f"top tourist attractions in {city} must visit", max_results=4)
         if sights_results:
             for r in sights_results:
+                # Clean up title (remove | Tripadvisor, etc.)
+                clean_title = r['title'].split('-')[0].split('|')[0].strip()
                 guide['see'].append({
-                    "title": r['title'].split('-')[0].split('|')[0].strip(), # Clean up title
+                    "title": clean_title, 
                     "desc": r['body'][:120] + "..."
                 })
 
@@ -29,8 +31,9 @@ def search_internet_for_guide(city):
         food_results = ddgs.text(f"famous local food must eat in {city}", max_results=4)
         if food_results:
             for r in food_results:
+                clean_title = r['title'].split('-')[0].split('|')[0].strip()
                 guide['eat'].append({
-                    "title": r['title'].split('-')[0].split('|')[0].strip(),
+                    "title": clean_title,
                     "desc": r['body'][:120] + "..."
                 })
 
