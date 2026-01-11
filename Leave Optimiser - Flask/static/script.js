@@ -34,3 +34,11 @@ document.getElementById('toInput').addEventListener('input', async (e) => {
         list.appendChild(div);
     });
 });
+
+document.addEventListener('click', (e) => {
+    const list = document.getElementById('toList');
+    const input = document.getElementById('toInput');
+    if (e.target !== input && e.target !== list) {
+        list.classList.add('hidden');
+    }
+});
