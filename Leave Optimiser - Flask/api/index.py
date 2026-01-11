@@ -6,52 +6,71 @@ from math import radians, cos, sin, asin, sqrt
 
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
-# --- 1. THE "LIVE SCRAPER" (DuckDuckGo) ---
+# --- 1. OPTIMIZED DUCKDUCKGO SCRAPER ---
 def search_internet_for_guide(city):
     guide = {"see": [], "eat": []}
     
+    # 1. Define "Trusted Sources" to force good results
+    # We tell DDG: "Only show me results from these high-quality travel sites"
+    travel_sites = "site:lonelyplanet.com OR site:tripadvisor.com OR site:timeout.com OR site:theculturetrip.com"
+    food_sites = "site:eater.com OR site:michelin.com OR site:willflyforfood.net OR site:sethlui.com"
+
     try:
         ddgs = DDGS()
         
-        # A. SEARCH FOR SIGHTS
-        # We search specifically for "Top things to do in [City]"
-        # We take the top 4 search results
-        sights_results = ddgs.text(f"top tourist attractions in {city} must visit", max_results=4)
+        # A. SEARCH FOR SIGHTS (Strict Mode)
+        # Query becomes: "best things to do tokyo site:lonelyplanet.com OR ..."
+        see_query = f"best things to do {city} {travel_sites}"
+        
+        # We fetch 8 results to have enough buffer after filtering
+        sights_results = ddgs.text(see_query, max_results=8)
+        
         if sights_results:
             for r in sights_results:
-                # Clean up title (remove | Tripadvisor, etc.)
-                clean_title = r['title'].split('-')[0].split('|')[0].strip()
+                title = r['title']
+                # SPAM FILTER: Skip results that look like logins or ads
+                if any(x in title.lower() for x in ['login', 'sign up', 'course', 'student', 'profile']):
+                    continue
+                
+                # Clean Title: "15 Best Things to Do in Tokyo - Lonely Planet" -> "15 Best Things to Do in Tokyo"
+                clean_title = title.split(' - ')[0].split(' | ')[0]
+                
                 guide['see'].append({
-                    "title": clean_title, 
+                    "title": clean_title[:50], # Keep it short
                     "desc": r['body'][:120] + "..."
                 })
+                # Stop once we have 3 good ones
+                if len(guide['see']) >= 3: break
 
-        # B. SEARCH FOR FOOD
-        # We search for "Must eat food in [City]"
-        food_results = ddgs.text(f"famous local food must eat in {city}", max_results=4)
+        # B. SEARCH FOR FOOD (Strict Mode)
+        eat_query = f"must eat food {city} {food_sites}"
+        food_results = ddgs.text(eat_query, max_results=8)
+        
         if food_results:
             for r in food_results:
-                clean_title = r['title'].split('-')[0].split('|')[0].strip()
+                title = r['title']
+                if any(x in title.lower() for x in ['login', 'sign up', 'course', 'delivery']):
+                    continue
+
+                clean_title = title.split(' - ')[0].split(' | ')[0]
                 guide['eat'].append({
-                    "title": clean_title,
+                    "title": clean_title[:50],
                     "desc": r['body'][:120] + "..."
                 })
+                if len(guide['eat']) >= 3: break
 
     except Exception as e:
         print(f"Scrape Error: {e}")
-        # Fallback if DuckDuckGo blocks the request (rare but possible)
-        guide = {
-            "see": [{"title": "City Center", "desc": f"Explore the highlights of {city}."}],
-            "eat": [{"title": "Local Delicacies", "desc": f"Try the street food in {city}."}]
-        }
 
-    # Safety check: If search found nothing, fill with generic
-    if not guide['see']: guide['see'].append({"title": "Explore Downtown", "desc": "Visit the city center."})
-    if not guide['eat']: guide['eat'].append({"title": "Local Cuisine", "desc": "Try authentic local dishes."})
+    # Fallback if strict search fails (e.g. city is too small)
+    if not guide['see']: 
+        guide['see'].append({"title": "City Centre", "desc": f"Explore the highlights of {city}."})
+    if not guide['eat']: 
+        guide['eat'].append({"title": "Local Delicacies", "desc": f"Try the street food in {city}."})
         
     return guide
 
-# --- 2. EXISTING HELPER FUNCTIONS ---
+# --- 2. EXISTING HELPERS ---
 def get_weather(lat, lng):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current_weather=true"
@@ -90,7 +109,6 @@ def search_city():
 def plan_trip():
     data = request.json
     year = int(data.get('year'))
-    leaves_balance = int(data.get('leavesLeft', 14))
     
     f_lat = data['from']['latitude']
     f_lng = data['from']['longitude']
@@ -102,7 +120,7 @@ def plan_trip():
     weather = get_weather(t_lat, t_lng)
     dist, budget = calc_budget(f_lat, f_lng, t_lat, t_lng)
     
-    # 2. THE LIVE SCRAPE
+    # 2. THE OPTIMIZED SCRAPE
     guide = search_internet_for_guide(city)
 
     # 3. Holiday Logic
