@@ -1,6 +1,5 @@
 from flask import Flask, jsonify, request, render_template
 import requests
-import pandas as pd
 from math import radians, cos, sin, asin, sqrt
 from datetime import datetime, timedelta
 
@@ -16,31 +15,47 @@ def get_weather(lat, lng):
 
 def get_wikivoyage(city):
     try:
-        # Search
+        # 1. Search for Page
         r = requests.get("https://en.wikivoyage.org/w/api.php", params={"action": "query", "list": "search", "srsearch": city, "format": "json"}).json()
-        if not r['query']['search']: return None
+        if not r.get('query', {}).get('search'): return None
         title = r['query']['search'][0]['title']
         
-        # Content
+        # 2. Get Content
         r2 = requests.get("https://en.wikivoyage.org/w/api.php", params={"action": "query", "prop": "extracts", "titles": title, "explaintext": 1, "format": "json"}).json()
         page = next(iter(r2['query']['pages'].values()))
         text = page.get('extract', '')
 
-        def extract(section):
-            start = text.find(f"== {section} ==")
-            if start == -1: return []
+        # 3. Smart Extraction
+        def extract(section_names):
             items = []
-            for line in text[start:].split('\n')[1:]:
-                if line.startswith("=="): break
-                if "*" in line and len(line) > 20:
-                    clean = line.replace("*", "").strip()
-                    parts = clean.split(" - ", 1) if " - " in clean else [clean, "Explore this highlight."]
-                    items.append({"title": parts[0][:50], "desc": parts[1][:150]+"..."})
-                    if len(items) >= 3: break
+            for name in section_names:
+                start = text.find(f"== {name} ==")
+                if start != -1:
+                    lines = text[start:].split('\n')[1:]
+                    for line in lines:
+                        if line.startswith("=="): break
+                        # Look for list items or long sentences
+                        if "*" in line and len(line) > 20:
+                            clean = line.replace("*", "").strip()
+                            parts = clean.split(" - ", 1) if " - " in clean else [clean, ""]
+                            desc = parts[1] if parts[1] else "Explore this highlight."
+                            items.append({"title": parts[0][:40], "desc": desc[:120]+"..."})
+                            if len(items) >= 3: return items
             return items
 
-        return {"see": extract("See") + extract("Do"), "eat": extract("Eat")}
-    except: return None
+        # Try multiple section names (e.g., "See", "Do", "Sights")
+        see = extract(["See", "Do", "Sights", "Attractions"])
+        eat = extract(["Eat", "Drink", "Food"])
+        
+        # Fallback if empty (e.g. for Countries like "Japan")
+        if not see:
+            see = [{"title": "Explore Region", "desc": text[:150] + "..."}]
+        if not eat:
+            eat = [{"title": "Local Cuisine", "desc": "Try the local national dishes and street food."}]
+
+        return {"see": see, "eat": eat}
+    except: 
+        return {"see": [{"title":"Explore", "desc":"Discover local sights."}], "eat": [{"title":"Local Food", "desc":"Try local delicacies."}]}
 
 def calc_budget(lat1, lon1, lat2, lon2):
     try:
@@ -49,8 +64,8 @@ def calc_budget(lat1, lon1, lat2, lon2):
         a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
         c = 2 * asin(sqrt(a))
         dist = int(R * c)
-        if dist < 1500: return f"{dist}km", "Low ($)"
-        if dist < 5000: return f"{dist}km", "Med ($$)"
+        if dist < 1000: return f"{dist}km", "Low ($)"
+        if dist < 4000: return f"{dist}km", "Med ($$)"
         return f"{dist}km", "High ($$$)"
     except: return "-", "-"
 
@@ -78,35 +93,31 @@ def plan_trip():
     t_lat, t_lng = data['to']['latitude'], data['to']['longitude']
     city_name = data['to']['name']
 
-    # 1. Weather & Budget
+    # Weather & Budget
     weather = get_weather(t_lat, t_lng)
     dist, budget = calc_budget(f_lat, f_lng, t_lat, t_lng)
-    
-    # 2. Guide
     guide = get_wikivoyage(city_name)
-    if not guide: guide = {"see": [], "eat": []}
 
-    # 3. Holiday Logic (Simplified for JSON response)
-    # Fetch holidays
-    h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
-    h_data = requests.get(h_url).json()
-    holidays = []
-    
-    # Process into logic
-    # (We return just the first valid long weekend for simplicity in this demo, 
-    # but you can expand this to return all)
-    for h in h_data:
-        dt = datetime.strptime(h['date'], "%Y-%m-%d")
-        # Logic: Find the Mon-Fri block
-        mon = dt - timedelta(days=dt.weekday())
-        start = (mon - timedelta(days=2)).strftime("%d %b")
-        end = (mon + timedelta(days=6)).strftime("%d %b")
-        holidays.append({
-            "name": h['localName'],
-            "date": dt.strftime("%d %b"),
-            "range": f"{start} - {end}",
-            "leaves": 4 # Hardcoded logic for demo, can be dynamic
-        })
+    # Holiday Logic
+    try:
+        h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
+        h_data = requests.get(h_url).json()
+        holidays = []
+        for h in h_data:
+            dt = datetime.strptime(h['date'], "%Y-%m-%d")
+            # Logic: 9 Day Trip (Sat -> Sun next week)
+            # Find the Monday of that week
+            mon = dt - timedelta(days=dt.weekday())
+            start = (mon - timedelta(days=2)) # Previous Sat
+            end = (mon + timedelta(days=6))   # Next Sun
+            
+            holidays.append({
+                "name": h['localName'],
+                "date": dt.strftime("%d %b"),
+                "range": f"{start.strftime('%d %b')} - {end.strftime('%d %b')}",
+                "leaves": 4 # Simplified logic
+            })
+    except: holidays = []
 
     return jsonify({
         "weather": weather,
@@ -116,6 +127,5 @@ def plan_trip():
         "holidays": holidays
     })
 
-# For local testing
 if __name__ == '__main__':
     app.run(debug=True)
