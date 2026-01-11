@@ -1,13 +1,35 @@
-/* Core Layout: Side-by-Side Grid */
-.dashboard-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr; /* Forces two equal columns */
-    gap: 24px;
-    margin-top: 24px;
-    align-items: start;
+:root {
+    --bg: #0b1120;
+    --card-bg: #1e293b;
+    --border: #334155;
+    --text: #f8fafc;
 }
 
-/* Internal Stats: 2x2 Grid */
+body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    margin: 0; padding: 20px;
+}
+
+.container { max-width: 1200px; margin: 0 auto; }
+
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+/* SIDE-BY-SIDE LAYOUT */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr; /* Left side slightly wider */
+    gap: 24px;
+    margin-top: 24px;
+}
+
+/* 2x2 STATS GRID */
 .stats-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -15,54 +37,18 @@
     margin-top: 16px;
 }
 
-/* Dashboard Cards */
-.card {
-    background: #1e293b; /* Deep slate from your screenshot */
-    border: 1px solid #334155;
-    border-radius: 12px;
-    padding: 20px;
-}
+.stat-box { display: flex; flex-direction: column; min-height: 100px; }
+.stat-box .label { font-size: 0.75rem; color: #94a3b8; font-weight: bold; }
+.stat-box .value { font-size: 1.5rem; font-weight: bold; margin-top: 8px; }
+.stat-box .sub { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
 
-.stat-box {
-    display: flex;
-    flex-direction: column;
-    min-height: 120px;
-    justify-content: center;
-}
+/* Colors from the image borders */
+.stat-box.dates { border-left: 4px solid #38bdf8; }
+.stat-box.weather { border-left: 4px solid #fbbf24; }
+.stat-box.budget { border-left: 4px solid #10b981; }
+.stat-box.cost { border-left: 4px solid #8b5cf6; }
 
-/* Color Accents (Left Borders) */
-.stat-box.dates { border-left: 4px solid #38bdf8; }   /* Sky Blue */
-.stat-box.weather { border-left: 4px solid #fbbf24; } /* Amber */
-.stat-box.budget { border-left: 4px solid #10b981; }  /* Emerald */
-.stat-box.cost { border-left: 4px solid #8b5cf6; }    /* Violet */
-
-/* Typography */
-.stat-box .label {
-    font-size: 0.75rem;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-}
-
-.stat-box .value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #f8fafc;
-    margin-top: 8px;
-}
-
-.stat-box .sub {
-    font-size: 0.85rem;
-    color: #64748b;
-    margin-top: 4px;
-}
-
-/* Itinerary List Items */
-.guide-item {
-    background: #0f172a;
-    border: 1px solid #334155;
-    padding: 12px;
-    margin-bottom: 12px;
-    border-radius: 8px;
+/* Responsive: stack on small screens */
+@media (max-width: 900px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
 }
