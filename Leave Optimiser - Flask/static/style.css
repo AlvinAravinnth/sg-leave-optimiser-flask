@@ -21,7 +21,7 @@ h1 { color: #38BDF8; margin-bottom: 5px; }
     flex-wrap: wrap; /* Prevents squashing on small screens */
 }
 
-.input-group { display: flex; flex-direction: column; }
+.input-group { display: flex; flex-direction: column; position: relative;}
 .sm { flex: 1; min-width: 150px; } /* Fixes the tiny input issue */
 .lg { flex: 2; min-width: 250px; }
 
@@ -89,3 +89,4 @@ input:focus, select:focus { border-color: #38BDF8; }
     padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-left: 5px;
 }
 .toggle-btn.active { background: #38BDF8; color: #0F172A; border-color: #38BDF8; }
+
