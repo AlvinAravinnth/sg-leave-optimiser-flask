@@ -61,7 +61,7 @@ def get_travel_guide(city):
         """
         
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model="gemini-3-flash-preview",
             contents=prompt
         )
         
@@ -184,3 +184,4 @@ def plan_trip():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
