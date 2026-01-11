@@ -1,118 +1,74 @@
 from flask import Flask, jsonify, request, render_template
 import requests
-from math import radians, cos, sin, asin, sqrt
+from duckduckgo_search import DDGS
 from datetime import datetime, timedelta
+from math import radians, cos, sin, asin, sqrt
 
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
-# --- 1. ROBUST GUIDE FETCHER ---
-def get_wikivoyage(city, country, lat, lng):
+# --- 1. THE "LIVE SCRAPER" (DuckDuckGo) ---
+def search_internet_for_guide(city):
+    guide = {"see": [], "eat": []}
+    
     try:
-        # A. SEARCH
-        # Clean query: "Tokyo, Japan" -> "Tokyo"
-        clean_query = city.split(',')[0].strip()
+        ddgs = DDGS()
         
-        # 1. Get Page Title
-        r1 = requests.get("https://en.wikivoyage.org/w/api.php", 
-                         params={"action": "query", "list": "search", "srsearch": clean_query, "format": "json"}).json()
-        
-        if not r1.get('query', {}).get('search'):
-            return {"see": [], "eat": []}
-            
-        title = r1['query']['search'][0]['title']
+        # A. SEARCH FOR SIGHTS
+        # We search specifically for "Top things to do in [City]"
+        # We take the top 4 search results
+        sights_results = ddgs.text(f"top tourist attractions in {city} must visit", max_results=4)
+        if sights_results:
+            for r in sights_results:
+                guide['see'].append({
+                    "title": r['title'].split('-')[0].split('|')[0].strip(), # Clean up title
+                    "desc": r['body'][:120] + "..."
+                })
 
-        # 2. Get Page Content & Intro
-        r2 = requests.get("https://en.wikivoyage.org/w/api.php", 
-                         params={"action": "query", "prop": "extracts", "titles": title, "explaintext": 1, "format": "json"}).json()
-        
-        page = next(iter(r2['query']['pages'].values()))
-        text = page.get('extract', '')
-        intro = text.split('\n')[0] # First paragraph is the summary
-
-        # 3. Helper to find sections
-        def extract_items(headers):
-            items = []
-            for header in headers:
-                start = text.find(f"== {header} ==")
-                if start != -1:
-                    subtext = text[start:].split('\n')
-                    for line in subtext[1:]:
-                        if line.startswith("=="): break 
-                        if "*" in line and len(line) > 20:
-                            clean = line.replace("*", "").strip()
-                            parts = clean.split(" - ", 1) if " - " in clean else [clean, ""]
-                            desc = parts[1] if len(parts) > 1 else "Must visit location."
-                            # Clean titles like "Place (Details)" -> "Place"
-                            t_clean = parts[0].split('(')[0].strip()
-                            
-                            items.append({"title": t_clean[:40], "desc": desc[:120]+"..."})
-                            if len(items) >= 4: return items
-            return items
-
-        # Try to find specific lists
-        see = extract_items(["See", "Do", "Sights", "Attractions"])
-        eat = extract_items(["Eat", "Drink", "Food"])
-        
-        # --- THE FIX: FALLBACK TO INTRO ---
-        # If no specific "See" items found, use the Page Summary as a general card
-        if not see: 
-            see = [{"title": f"Explore {clean_query}", "desc": intro[:200] + "..."}]
-        
-        if not eat:
-            eat = [{"title": "Local Cuisine", "desc": f"Discover the authentic flavors of {clean_query}."}]
-
-        return {"see": see, "eat": eat}
+        # B. SEARCH FOR FOOD
+        # We search for "Must eat food in [City]"
+        food_results = ddgs.text(f"famous local food must eat in {city}", max_results=4)
+        if food_results:
+            for r in food_results:
+                guide['eat'].append({
+                    "title": r['title'].split('-')[0].split('|')[0].strip(),
+                    "desc": r['body'][:120] + "..."
+                })
 
     except Exception as e:
-        print(f"Error: {e}")
-        return {"see": [{"title": "Explore", "desc": "Discover local sights."}], "eat": []}
-
-# --- 2. STRATEGY ENGINE ---
-def calculate_strategies(holiday_date, leaves_balance):
-    h_date = datetime.strptime(holiday_date, "%Y-%m-%d")
-    weekday = h_date.weekday()
-
-    # STRATEGY A: "Lobang" (Quick)
-    lobang_plan = {"name": "Long Weekend", "off": 3, "cost": 0, "start": 0, "end": 2} # Default
-    
-    if weekday == 1: # Tue -> Take Mon
-        lobang_plan = {"name": "4-Day Bridge", "off": 4, "cost": 1, "start": -1, "end": 0}
-    elif weekday == 3: # Thu -> Take Fri
-        lobang_plan = {"name": "4-Day Bridge", "off": 4, "cost": 1, "start": 0, "end": 1}
-    elif weekday == 2: # Wed -> Take Thu/Fri
-        lobang_plan = {"name": "5-Day Break", "off": 5, "cost": 2, "start": 0, "end": 2}
-
-    # STRATEGY B: "Shiok" (9 Days)
-    # Find Mon of current week
-    mon_of_week = h_date - timedelta(days=weekday)
-    shiok_start = mon_of_week - timedelta(days=2) # Previous Sat
-    
-    # Calculate exact cost
-    shiok_cost = 0
-    for i in range(9):
-        day = shiok_start + timedelta(days=i)
-        if day.weekday() < 5 and day.date() != h_date.date():
-            shiok_cost += 1
-
-    def fmt(d): return d.strftime("%d %b")
-    
-    # Calc dates for Lobang based on offsets
-    l_start = h_date + timedelta(days=-1 if weekday==1 else 0) 
-    # (Simplified date logic for demo stability)
-    l_range = f"{fmt(h_date)} - {fmt(h_date + timedelta(days=2))}"
-
-    return {
-        "lobang": {
-            "range": l_range, "leaves": lobang_plan['cost'], "off": lobang_plan['off'], "type": lobang_plan['name']
-        },
-        "shiok": {
-            "range": f"{fmt(shiok_start)} - {fmt(shiok_start + timedelta(days=8))}",
-            "leaves": shiok_cost, "off": 9, "type": "Maximize Block"
+        print(f"Scrape Error: {e}")
+        # Fallback if DuckDuckGo blocks the request (rare but possible)
+        guide = {
+            "see": [{"title": "City Center", "desc": f"Explore the highlights of {city}."}],
+            "eat": [{"title": "Local Delicacies", "desc": f"Try the street food in {city}."}]
         }
-    }
+
+    # Safety check: If search found nothing, fill with generic
+    if not guide['see']: guide['see'].append({"title": "Explore Downtown", "desc": "Visit the city center."})
+    if not guide['eat']: guide['eat'].append({"title": "Local Cuisine", "desc": "Try authentic local dishes."})
+        
+    return guide
+
+# --- 2. EXISTING HELPER FUNCTIONS ---
+def get_weather(lat, lng):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current_weather=true"
+        data = requests.get(url, timeout=1).json()
+        return f"{data['current_weather']['temperature']}°C"
+    except: return "N/A"
+
+def calc_budget(lat1, lon1, lat2, lon2):
+    try:
+        R = 6371
+        dlat, dlon = radians(lat2 - lat1), radians(lon2 - lon1)
+        a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a))
+        dist = int(R * c)
+        if dist < 1000: return f"{dist}km", "Low ($)"
+        elif dist < 4000: return f"{dist}km", "Med ($$)"
+        else: return f"{dist}km", "High ($$$)"
+    except: return "-", "-"
 
 # --- 3. ROUTES ---
-
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -133,43 +89,56 @@ def plan_trip():
     year = int(data.get('year'))
     leaves_balance = int(data.get('leavesLeft', 14))
     
+    f_lat = data['from']['latitude']
+    f_lng = data['from']['longitude']
     t_lat = data['to']['latitude']
     t_lng = data['to']['longitude']
     city = data['to']['name']
-    country = data['to'].get('country', '')
 
-    # Weather & Budget
-    try:
-        w_url = f"https://api.open-meteo.com/v1/forecast?latitude={t_lat}&longitude={t_lng}&current_weather=true"
-        w_data = requests.get(w_url, timeout=2).json()
-        weather = f"{w_data['current_weather']['temperature']}°C"
-    except: weather = "N/A"
+    # 1. Fetch Live Data
+    weather = get_weather(t_lat, t_lng)
+    dist, budget = calc_budget(f_lat, f_lng, t_lat, t_lng)
+    
+    # 2. THE LIVE SCRAPE
+    guide = search_internet_for_guide(city)
 
-    # Guide
-    guide = get_wikivoyage(city, country, t_lat, t_lng)
-
-    # Holidays
+    # 3. Holiday Logic
+    holidays = []
     try:
         h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
         h_data = requests.get(h_url).json()
-        holidays = []
         for h in h_data:
-            st = calculate_strategies(h['date'], leaves_balance)
+            dt = datetime.strptime(h['date'], "%Y-%m-%d")
+            weekday = dt.weekday()
+            
+            # Lobang Strategy
+            if weekday in [1, 2, 3]: # Tue-Thu
+                l_off, l_cost, l_note = 4, 1, "Bridge 1 Day"
+            else:
+                l_off, l_cost, l_note = 3, 0, "Long Weekend"
+
+            # Shiok Strategy (Sat -> Sun)
+            mon = dt - timedelta(days=weekday)
+            s_start = mon - timedelta(days=2)
+            s_end = mon + timedelta(days=6)
+            
             holidays.append({
                 "name": h['localName'],
-                "date": datetime.strptime(h['date'], "%Y-%m-%d").strftime("%d %b"),
-                "strategies": st
+                "date": dt.strftime("%d %b"),
+                "strategies": {
+                    "lobang": {"range": "Long Weekend", "off": l_off, "leaves": l_cost, "note": l_note},
+                    "shiok": {"range": f"{s_start.strftime('%d %b')} - {s_end.strftime('%d %b')}", "off": 9, "leaves": 4, "note": "Maximize Block"}
+                }
             })
-    except: holidays = []
+    except: pass
 
     return jsonify({
         "weather": weather,
-        "dist": "5000km", # Simplified for stability
-        "budget": "Med ($$)",
+        "dist": dist,
+        "budget": budget,
         "guide": guide,
         "holidays": holidays
     })
 
 if __name__ == '__main__':
     app.run(debug=True)
-
