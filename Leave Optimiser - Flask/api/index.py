@@ -30,27 +30,19 @@ CITY_CACHE = {}
 
 # --- 2. SMART GUIDE (Gemini AI) ---
 def get_travel_guide(city):
-    # Normalize City Name
     cache_key = city.lower().strip()
-
-    # Check Cache
     if cache_key in CITY_CACHE:
         return CITY_CACHE[cache_key]
 
-    # Default Fallback
     default_guide = {
         "see": [{"title": "Explore City Center", "desc": f"Discover the main landmarks of {city}."}], 
         "eat": [{"title": "Local Delicacies", "desc": "Try the authentic local street food."}]
     }
 
     if not client:
-        return {
-            "see": [{"title": "Missing API Key", "desc": "GEMINI_API_KEY not found in Vercel."}], 
-            "eat": [{"title": "Setup Required", "desc": "Please add the key in Vercel Settings."}]
-        }
+        return default_guide
 
     try:
-        # Ask AI
         prompt = f"""
         I am a Singaporean tourist visiting {city}. 
         Return a valid JSON object with exactly two keys: "see" and "eat".
@@ -60,31 +52,24 @@ def get_travel_guide(city):
         IMPORTANT: Return ONLY the raw JSON string. No markdown formatting.
         """
         
+        # Using the model that worked for you
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model='gemini-2.0-flash-exp',
             contents=prompt
         )
         
         text = response.text.strip()
-        
-        # Clean up Markdown
         if text.startswith("```"): 
             text = text.split("```")[1]
             if text.startswith("json"): text = text[4:]
         
         data = json.loads(text.strip())
-
-        # Save to Cache
         CITY_CACHE[cache_key] = data
         return data
 
     except Exception as e:
         print(f"❌ AI Error: {e}")
-        # --- DEBUG MODE: PRINT ERROR TO SCREEN ---
-        return {
-            "see": [{"title": "⚠️ AI Error", "desc": str(e)}], 
-            "eat": [{"title": "Fix Needed", "desc": "Please screenshot this message."}]
-        }
+        return default_guide
 
 # --- 3. HELPER FUNCTIONS ---
 def get_weather(lat, lng):
@@ -142,37 +127,53 @@ def plan_trip():
         h_data = requests.get(h_url).json()
         for h in h_data:
             dt = datetime.strptime(h['date'], "%Y-%m-%d")
-            weekday = dt.weekday()
+            weekday = dt.weekday() # Mon=0 ... Sun=6
             
-            # Strategies (Keeping simple for brevity)
+            # --- STRATEGY: LOBANG ---
             l_leaves, l_off = 0, 3
             l_start, l_end = dt, dt
-            
-            if weekday == 1: # Tue
-                l_leaves, l_off = 1, 4
+            l_rec = "No leave needed!" # Default text
+
+            if weekday == 0: # Mon -> Sat-Mon
+                l_start = dt - timedelta(days=2)
+                l_end = dt
+            elif weekday == 4: # Fri -> Fri-Sun
+                l_start = dt
+                l_end = dt + timedelta(days=2)
+            elif weekday == 1: # Tue -> Sat-Tue (Take Mon)
                 l_start = dt - timedelta(days=3)
                 l_end = dt
-            else:
-                l_start = dt - timedelta(days=2) if weekday==0 else dt
-                l_end = dt + timedelta(days=2) if weekday==4 else dt
+                l_leaves, l_off = 1, 4
+                l_rec = f"Take {(dt - timedelta(days=1)).strftime('%a %d %b')}"
+            elif weekday == 3: # Thu -> Thu-Sun (Take Fri)
+                l_start = dt
+                l_end = dt + timedelta(days=3)
+                l_leaves, l_off = 1, 4
+                l_rec = f"Take {(dt + timedelta(days=1)).strftime('%a %d %b')}"
+            elif weekday == 2: # Wed -> Thu-Sun (Take Thu,Fri)
+                l_start = dt
+                l_end = dt + timedelta(days=4)
+                l_leaves, l_off = 2, 5
+                l_rec = f"Take {(dt+timedelta(days=1)).strftime('%a')} & {(dt+timedelta(days=2)).strftime('%a')}"
 
             l_range = f"{l_start.strftime('%d %b')} - {l_end.strftime('%d %b')}"
-            
-            # Shiok
+
+            # --- STRATEGY: SHIOK ---
             mon_of_week = dt - timedelta(days=weekday)
-            s_start = mon_of_week - timedelta(days=2)
-            s_end = mon_of_week + timedelta(days=6)
+            s_start = mon_of_week - timedelta(days=2) # Previous Sat
+            s_end = mon_of_week + timedelta(days=6)   # Next Sun
             s_range = f"{s_start.strftime('%d %b')} - {s_end.strftime('%d %b')}"
+            s_rec = "Clear the week"
 
             holidays.append({
                 "name": h['localName'],
                 "date": dt.strftime("%d %b"),
                 "strategies": {
-                    "lobang": {"range": l_range, "off": l_off, "leaves": l_leaves, "type": "Quick Getaway"},
-                    "shiok": {"range": s_range, "off": 9, "leaves": 4, "type": "Maximize Block"}
+                    "lobang": {"range": l_range, "off": l_off, "leaves": l_leaves, "rec": l_rec},
+                    "shiok": {"range": s_range, "off": 9, "leaves": 4, "rec": s_rec}
                 }
             })
-    except Exception as e: pass
+    except Exception as e: print(e)
 
     return jsonify({
         "weather": weather,
@@ -184,4 +185,3 @@ def plan_trip():
 
 if __name__ == '__main__':
     app.run(debug=True)
-
