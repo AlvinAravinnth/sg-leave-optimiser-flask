@@ -181,4 +181,35 @@ def plan_trip():
             "eat": [{"title": "Local Eats", "desc": "Try the famous local dishes."}]
         }
 
-    # 4. Holiday
+    # 4. Holiday Logic (The "AI")
+    try:
+        h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
+        h_data = requests.get(h_url).json()
+        holidays = []
+        
+        for h in h_data:
+            # Run the optimizer for each holiday
+            plan = optimize_leave(h['date'], leaves_balance)
+            
+            holidays.append({
+                "name": h['localName'],
+                "date": datetime.strptime(h['date'], "%Y-%m-%d").strftime("%d %b"),
+                "range": plan['range'],
+                "leaves": plan['leaves'],
+                "off": plan['off'],
+                "note": plan['note']
+            })
+    except Exception as e:
+        print(e)
+        holidays = []
+
+    return jsonify({
+        "weather": weather,
+        "dist": f"{dist_km}km",
+        "budget": budget,
+        "guide": guide,
+        "holidays": holidays
+    })
+
+if __name__ == '__main__':
+    app.run(debug=True)
