@@ -1,10 +1,20 @@
 let fromData = { name: "Singapore", latitude: 1.29, longitude: 103.85 };
 let toData = null;
 let holidaysData = [];
+let currentHolidayIdx = 0;
+let currentStrategy = 'lobang'; // 'lobang' (Quick) or 'shiok' (Max)
 
-// Trigger function for simple inputs
 function triggerUpdate() {
     if (toData) generatePlan();
+}
+
+function setStrategy(mode) {
+    currentStrategy = mode;
+    // Update buttons
+    document.getElementById('btnLobang').className = mode === 'lobang' ? 'active' : '';
+    document.getElementById('btnShiok').className = mode === 'shiok' ? 'active' : '';
+    // Refresh view
+    renderHolidayStats();
 }
 
 function setupAutocomplete(inputId, listId, isFrom) {
@@ -30,96 +40,88 @@ function setupAutocomplete(inputId, listId, isFrom) {
                     if (isFrom) fromData = city;
                     else {
                         toData = city;
-                        generatePlan(); // AUTO TRIGGER
+                        generatePlan();
                     }
                 };
                 list.appendChild(item);
             });
-        } catch(e) { console.error(e); }
+        } catch(e) {}
     });
     
-    // Close on click outside
-    document.addEventListener('click', (e) => {
-        if (e.target !== input) list.innerHTML = '';
-    });
+    document.addEventListener('click', (e) => { if (e.target !== input) list.innerHTML = ''; });
 }
 
 async function generatePlan() {
     if (!fromData || !toData) return;
     
-    const year = document.getElementById('year').value;
-    const leaves = document.getElementById('leaves').value;
     const dash = document.getElementById('dashboard');
-    
     dash.classList.remove('hidden');
-    dash.style.opacity = '0.6'; // Loading effect
+    dash.style.opacity = '0.5';
 
     try {
         const res = await fetch('/api/plan', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ from: fromData, to: toData, year: year, leavesLeft: leaves })
+            body: JSON.stringify({
+                from: fromData, to: toData, 
+                year: document.getElementById('year').value, 
+                leavesLeft: document.getElementById('leaves').value 
+            })
         });
         
         const data = await res.json();
         holidaysData = data.holidays;
 
-        // Populate Logistics
+        // Static Info
         document.getElementById('routeTitle').innerText = `${fromData.name} ➝ ${toData.name}`;
         document.getElementById('weatherVal').innerText = data.weather;
         document.getElementById('budgetVal').innerText = data.budget;
         document.getElementById('distVal').innerText = data.dist;
 
-        // Populate Guide
-        const fillList = (id, items) => {
+        // Guide
+        const fill = (id, items) => {
             const el = document.getElementById(id);
-            el.innerHTML = '';
-            if(!items || items.length === 0) {
-                el.innerHTML = '<div style="color:#64748B; padding:10px;">No data found. Try general search.</div>';
-                return;
-            }
+            el.innerHTML = items.length ? '' : '<div style="opacity:0.6;font-size:13px">No specific info found.</div>';
             items.forEach(i => {
-                el.innerHTML += `
-                    <div class="guide-item">
-                        <span class="guide-title">${i.title}</span>
-                        <span class="guide-desc">${i.desc}</span>
-                    </div>`;
+                el.innerHTML += `<div class="guide-item"><b style="color:#38BDF8">${i.title}</b><div style="font-size:13px; color:#CBD5E1">${i.desc}</div></div>`;
             });
         };
-        fillList('seeList', data.guide.see);
-        fillList('eatList', data.guide.eat);
+        fill('seeList', data.guide.see);
+        fill('eatList', data.guide.eat);
 
-        // Populate Pills
+        // Nav
         const nav = document.getElementById('holidayNav');
         nav.innerHTML = '';
         data.holidays.forEach((h, idx) => {
             const btn = document.createElement('button');
             btn.innerText = `${h.name} (${h.date})`;
-            btn.className = idx === 0 ? 'active' : '';
-            btn.onclick = () => showHoliday(idx);
+            btn.onclick = () => { currentHolidayIdx = idx; renderHolidayStats(); };
             nav.appendChild(btn);
         });
-        
-        showHoliday(0);
+
+        // Default to first holiday
+        currentHolidayIdx = 0;
+        renderHolidayStats();
 
     } catch(e) { console.error(e); }
     finally { dash.style.opacity = '1'; }
 }
 
-function showHoliday(idx) {
-    if (!holidaysData[idx]) return;
-    const h = holidaysData[idx];
+function renderHolidayStats() {
+    if (!holidaysData[currentHolidayIdx]) return;
     
-    document.getElementById('dateRange').innerText = h.range;
-    document.getElementById('daysOffVal').innerText = `${h.off} Days Off`;
-    document.getElementById('leavesVal').innerText = h.leaves;
-    document.getElementById('aiNote').innerText = h.note; // The AI strategy text
-
-    // Update active pill
+    // Get plan based on current strategy selection
+    const h = holidaysData[currentHolidayIdx];
+    const plan = h.strategies[currentStrategy];
+    
+    document.getElementById('dateRange').innerText = plan.range;
+    document.getElementById('daysOffVal').innerText = `${plan.off} Days Off`;
+    document.getElementById('leavesVal').innerText = plan.leaves;
+    
+    // Highlight nav
     const btns = document.querySelectorAll('#holidayNav button');
-    btns.forEach((b, i) => b.className = i === idx ? 'active' : '');
+    btns.forEach((b, i) => b.className = i === currentHolidayIdx ? 'active' : '');
 }
 
-// Init
 setupAutocomplete('fromInput', 'fromList', true);
 setupAutocomplete('toInput', 'toList', false);
