@@ -1,49 +1,44 @@
 let selectedCity = null;
 
-document.addEventListener('DOMContentLoaded', () => {
-    const input = document.getElementById('toInput');
-    if (input) {
-        input.addEventListener('input', (e) => {
-            const val = e.target.value;
-            if (val.length > 2) searchCity(val);
-        });
-    }
-});
-
-async function searchCity(query) {
-    const res = await fetch(`/api/search?q=${query}`);
-    const data = await res.json();
+// Listen for typing in the Search Box
+document.getElementById('toInput').addEventListener('input', async (e) => {
+    const val = e.target.value;
+    if (val.length < 3) return;
+    
+    const res = await fetch(`/api/search?q=${val}`);
+    const cities = await res.json();
     const list = document.getElementById('toList');
     list.innerHTML = '';
     
-    data.forEach(city => {
-        const item = document.createElement('div');
-        item.className = 'suggestion-item';
-        item.innerText = `${city.name}, ${city.country || ''}`;
-        item.onclick = () => {
-            document.getElementById('toInput').value = city.name;
+    cities.forEach(city => {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item';
+        div.innerText = `${city.name}, ${city.country}`;
+        div.onclick = () => {
             selectedCity = city;
-            list.style.display = 'none';
-            generatePlan(city); // Trigger heavy lifting
+            document.getElementById('toInput').value = city.name;
+            list.innerHTML = '';
+            generatePlan(); // Start the heavy lifting
         };
-        list.appendChild(item);
+        list.appendChild(div);
     });
-    list.style.display = 'block';
-}
+});
 
-async function generatePlan(cityData) {
-    // 1. INSTANT HEADER UPDATE
-    const headerTitle = document.querySelector('.trip-header p');
-    if (headerTitle) headerTitle.innerText = `Singapore → ${cityData.name}`;
+async function generatePlan() {
+    if (!selectedCity) return;
 
-    // 2. SHOW SKELETON LOADERS
+    // 1. INSTANT HEADER UPDATE (UX Fix)
+    document.querySelector('.trip-header p').innerText = `Singapore → ${selectedCity.name}`;
     document.getElementById('dashboard').classList.remove('hidden');
-    document.getElementById('seeList').innerHTML = '<div class="shimmer">Gemini 3 is reasoning...</div>';
+
+    // 2. SHOW SKELETON LOADING
+    document.getElementById('seeList').innerHTML = '<div class="shimmer">Gemini 3 is reasoning through your trip...</div>';
+    document.getElementById('eatList').innerHTML = '';
 
     const payload = {
         leavesLeft: document.getElementById('leaves').value,
-        to: cityData,
-        year: document.getElementById('year').value
+        budget_type: document.getElementById('budgetText').innerText,
+        to: selectedCity
     };
 
     try {
@@ -54,39 +49,32 @@ async function generatePlan(cityData) {
         });
 
         const data = await res.json();
-        
-        if (data.ai) {
-            // Update UI with AI Decisions
-            document.getElementById('dateRange').innerText = data.ai.suggested_duration;
-            document.getElementById('leavesVal').innerText = data.ai.leave_recommendation;
-            document.getElementById('budgetVal').innerText = data.ai.budget.total;
+        const p = data.plan;
+
+        if (p) {
+            // Update UI Stats from AI Reasoning
+            document.getElementById('dateRange').innerText = `${p.duration} Stay`;
+            document.getElementById('leavesVal').innerText = p.leave_plan;
+            document.getElementById('budgetVal').innerText = p.cost_breakdown.total;
             document.getElementById('distVal').innerText = data.dist;
             
-            // Render the AI's custom itinerary
-            renderGuide(data.ai.itinerary);
+            // Log full breakdown for debug
+            console.log("AI Budget Logic:", p.cost_breakdown);
+            
+            renderItinerary(p.itinerary);
         }
-    } catch (e) { console.error("Plan failed:", e); }
+    } catch (e) { console.error("Plan Error:", e); }
 }
 
-function renderGuide(itinerary) {
-    const seeList = document.getElementById('seeList');
-    const eatList = document.getElementById('eatList');
-    seeList.innerHTML = '';
-    eatList.innerHTML = '';
+function renderItinerary(itin) {
+    const see = document.getElementById('seeList');
+    const eat = document.getElementById('eatList');
+    see.innerHTML = ''; eat.innerHTML = '';
 
-    itinerary.see.forEach(item => {
-        seeList.innerHTML += `
-            <div class="guide-item">
-                <span class="guide-title">${item.title}</span>
-                <span class="guide-desc">${item.desc}</span>
-            </div>`;
+    itin.see.forEach(i => {
+        see.innerHTML += `<div class="guide-item"><b>${i.title}</b><p>${i.desc}</p></div>`;
     });
-
-    itinerary.eat.forEach(item => {
-        eatList.innerHTML += `
-            <div class="guide-item">
-                <span class="guide-title">${item.title}</span>
-                <span class="guide-desc">${item.desc}</span>
-            </div>`;
+    itin.eat.forEach(i => {
+        eat.innerHTML += `<div class="guide-item"><b>${i.title}</b><p>${i.desc}</p></div>`;
     });
 }
