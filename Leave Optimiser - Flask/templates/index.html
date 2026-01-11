@@ -32,7 +32,7 @@
                 </div>
                 <div class="input-group">
                     <label>DESTINATION</label>
-                    <input type="text" id="toInput" placeholder="Enter city (e.g. Tokyo, London)..." autocomplete="off">
+                    <input type="text" id="toInput" placeholder="Enter city..." autocomplete="off">
                     <div id="toList" class="suggestions hidden"></div>
                 </div>
             </div>
@@ -40,10 +40,10 @@
 
         <main id="dashboard" class="dashboard-grid hidden">
             <div class="plan-section">
+                <button class="btn-back" onclick="resetSearch()">← Back to Search</button>
                 <div class="section-header">
                     <h2>✈️ Trip Plan</h2>
                     <div class="strategy-toggle">
-                        <span>STRATEGY:</span>
                         <button id="btnQuick" class="active">Quick</button>
                         <button id="btnMax">Max (9 Days)</button>
                     </div>
@@ -52,23 +52,23 @@
                 
                 <div class="stats-grid">
                     <div class="stat-box dates">
-                        <span class="label">DATES</span>
+                        <span class="label">DURATION</span>
                         <span id="dateRange" class="value">-</span>
                     </div>
                     <div class="stat-box weather">
-                        <span class="label">WEATHER</span>
+                        <span class="label">CURRENT WEATHER</span>
                         <span id="weatherVal" class="value">-</span>
-                        <span class="sub">Forecast</span>
+                        <span class="sub">Live Forecast</span>
                     </div>
                     <div class="stat-box budget">
-                        <span class="label">BUDGET</span>
+                        <span class="label">EST. BUDGET</span>
                         <span id="budgetVal" class="value">-</span>
                         <span id="distVal" class="sub">-</span>
                     </div>
                     <div class="stat-box cost">
-                        <span class="label">COST</span>
-                        <span id="leavesVal" class="value">-</span>
-                        <span class="sub">Leaves Used</span>
+                        <span class="label">LEAVE STRATEGY</span>
+                        <span id="leavesVal" class="value strategy-text">-</span>
+                        <span class="sub">Recommended Dates</span>
                     </div>
                 </div>
             </div>
