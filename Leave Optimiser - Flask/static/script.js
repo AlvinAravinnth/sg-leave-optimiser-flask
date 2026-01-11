@@ -1,6 +1,6 @@
 let selectedCity = null;
 
-// Handle Destination Search
+// Search Logic
 document.getElementById('toInput').addEventListener('input', async (e) => {
     const val = e.target.value;
     const list = document.getElementById('toList');
@@ -28,6 +28,15 @@ document.getElementById('toInput').addEventListener('input', async (e) => {
     }
 });
 
+function showLoading() {
+    const skeleton = '<div class="skeleton-loading"></div><div class="skeleton-loading"></div>';
+    document.getElementById('seeList').innerHTML = skeleton;
+    document.getElementById('eatList').innerHTML = skeleton;
+    document.getElementById('dateRange').innerText = 'Loading...';
+    document.getElementById('budgetVal').innerText = '...';
+    document.getElementById('leavesVal').innerText = 'Analyzing leave dates...';
+}
+
 async function fetchWeather(lat, lon) {
     try {
         const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
@@ -42,9 +51,9 @@ async function generatePlan() {
     document.querySelector('.input-panel').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
     document.getElementById('destName').innerText = selectedCity.name;
-    document.getElementById('seeList').innerHTML = '<p>Gemini is thinking...</p>';
+    
+    showLoading(); // Immediate feedback
 
-    // Fix Weather: Fetch live data
     const weather = await fetchWeather(selectedCity.latitude, selectedCity.longitude);
     document.getElementById('weatherVal').innerText = weather;
 
@@ -79,5 +88,4 @@ function resetSearch() {
     document.getElementById('dashboard').classList.add('hidden');
     document.querySelector('.input-panel').classList.remove('hidden');
     document.getElementById('toInput').value = '';
-    selectedCity = null;
 }
