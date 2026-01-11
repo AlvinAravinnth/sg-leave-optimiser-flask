@@ -39,49 +39,56 @@
         </section>
 
         <main id="dashboard" class="dashboard-grid hidden">
-            <div class="plan-section">
-                <button class="btn-back" onclick="resetSearch()">← Back to Search</button>
-                <div class="section-header">
-                    <h2>✈️ Trip Plan</h2>
-                    <div class="strategy-toggle">
-                        <button id="btnQuick" class="active">Quick</button>
-                        <button id="btnMax">Max (9 Days)</button>
-                    </div>
-                </div>
-                <div class="dest-label">Singapore → <span id="destName">-</span></div>
-                
-                <div class="stats-grid">
-                    <div class="stat-box dates">
-                        <span class="label">DURATION</span>
-                        <span id="dateRange" class="value">-</span>
-                    </div>
-                    <div class="stat-box weather">
-                        <span class="label">CURRENT WEATHER</span>
-                        <span id="weatherVal" class="value">-</span>
-                        <span class="sub">Live Forecast</span>
-                    </div>
-                    <div class="stat-box budget">
-                        <span class="label">EST. BUDGET</span>
-                        <span id="budgetVal" class="value">-</span>
-                        <span id="distVal" class="sub">-</span>
-                    </div>
-                    <div class="stat-box cost">
-                        <span class="label">LEAVE STRATEGY</span>
-                        <span id="leavesVal" class="value strategy-text">-</span>
-                        <span class="sub">Recommended Dates</span>
-                    </div>
-                </div>
+    <div class="metrics-column">
+        <button class="btn-back" onclick="resetSearch()">← Back</button>
+        <div class="section-header">
+            <h2>✈️ Trip Plan</h2>
+            <div class="strategy-toggle">
+                <button id="btnQuick" class="active">Quick</button>
+                <button id="btnMax">Max</button>
             </div>
+        </div>
+        <div class="dest-label">SG → <span id="destName">-</span></div>
+        
+        <div class="metrics-stack">
+            <div class="stat-box dates">
+                <span class="label">DURATION</span>
+                <span id="dateRange" class="value">-</span>
+            </div>
+            <div class="stat-box weather">
+                <span class="label">WEATHER</span>
+                <span id="weatherVal" class="value">-</span>
+            </div>
+            <div class="stat-box budget">
+                <span class="label">EST. BUDGET</span>
+                <span id="budgetVal" class="value">-</span>
+                <span id="distVal" class="sub">-</span>
+            </div>
+            <div class="stat-box strategy">
+                <span class="label">LEAVE STRATEGY</span>
+                <span id="leavesVal" class="value small-text">-</span>
+            </div>
+        </div>
+    </div>
 
-            <div class="guide-card">
-                <h3>📖 Lobang Guide</h3>
+    <div class="guide-column">
+        <div class="guide-header">
+            <h3>📖 Lobang Guide</h3>
+        </div>
+        <div class="guide-grid">
+            <div class="guide-section">
                 <h4>🗺️ Best Sights</h4>
-                <div id="seeList"></div>
-                <h4>🍜 Must Eat</h4>
-                <div id="eatList"></div>
+                <div id="seeList" class="guide-content"></div>
             </div>
-        </main>
+            <div class="guide-section">
+                <h4>🍜 Must Eat</h4>
+                <div id="eatList" class="guide-content"></div>
+            </div>
+        </div>
+    </div>
+</main>
     </div>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
+
