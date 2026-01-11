@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request, render_template
 import requests
-import google.generativeai as genai
+from google import genai
 import json
 import os
 from datetime import datetime, timedelta
@@ -16,21 +16,23 @@ app = Flask(__name__, template_folder='../templates', static_folder='../static')
 # SECURE: Get key from Environment Variable (Vercel or .env)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Configure AI only if key is present
+# Initialize Client only if key is present
+client = None
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-pro')
+    try:
+        # NEW SDK SYNTAX: Create a client instance
+        client = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception as e:
+        print(f"⚠️ SDK Init Error: {e}")
 else:
     print("⚠️ Warning: GEMINI_API_KEY not found. AI features will be disabled.")
-    model = None
 
 # --- 1. CACHING SYSTEM (Optimizes Free Tier) ---
-# Stores guide data in memory so we don't spam the AI for the same city twice.
 CITY_CACHE = {}
 
 # --- 2. SMART GUIDE (Gemini AI) ---
 def get_travel_guide(city):
-    # 1. Normalize City Name (e.g. "Tokyo " -> "tokyo")
+    # 1. Normalize City Name
     cache_key = city.lower().strip()
 
     # 2. Check Cache First
@@ -38,13 +40,13 @@ def get_travel_guide(city):
         print(f"⚡ Cache Hit: Served {city} from memory.")
         return CITY_CACHE[cache_key]
 
-    # Default Fallback (used if AI fails or Key is missing)
+    # Default Fallback
     default_guide = {
         "see": [{"title": "Explore City Center", "desc": f"Discover the main landmarks of {city}."}], 
         "eat": [{"title": "Local Delicacies", "desc": "Try the authentic local street food."}]
     }
 
-    if not model:
+    if not client:
         return default_guide
 
     try:
@@ -58,7 +60,13 @@ def get_travel_guide(city):
         IMPORTANT: Return ONLY the raw JSON string. No markdown formatting.
         """
         
-        response = model.generate_content(prompt)
+        # NEW SDK SYNTAX: Use client.models.generate_content
+        # We switch to 'gemini-1.5-flash' which is the current standard fast model
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt
+        )
+        
         text = response.text.strip()
         
         # Clean up Markdown (if AI adds ```json ... ```)
@@ -108,7 +116,6 @@ def search_city():
     query = request.args.get('q')
     if not query: return jsonify([])
     try:
-        # Geocoding API to find city coordinates
         url = f"https://geocoding-api.open-meteo.com/v1/search?name={query}&count=5&language=en&format=json"
         data = requests.get(url, timeout=2).json()
         return jsonify(data.get('results', []))
@@ -119,7 +126,6 @@ def plan_trip():
     data = request.json
     year = int(data.get('year'))
     
-    # Extract Coordinates & Name
     f_lat = data['from']['latitude']
     f_lng = data['from']['longitude']
     t_lat = data['to']['latitude']
@@ -142,9 +148,6 @@ def plan_trip():
         for h in h_data:
             dt = datetime.strptime(h['date'], "%Y-%m-%d")
             weekday = dt.weekday() # Mon=0, Tue=1, ... Sun=6
-            
-            # --- STRATEGY A: "LOBANG" (Quick Getaway) ---
-            # Logic: Min leaves for a decent break (3-5 days)
             
             l_leaves = 0
             l_off = 3
@@ -176,17 +179,12 @@ def plan_trip():
                 l_start = dt
                 l_end = dt
             
-            # Format dates nicely (e.g., "09 Aug - 11 Aug")
             l_range = f"{l_start.strftime('%d %b')} - {l_end.strftime('%d %b')}"
 
-            # --- STRATEGY B: "SHIOK" (Maximize 9 Days) ---
-            # Logic: Take the whole week off surrounding the holiday
-            # Find the Monday of the current week
+            # SHIOK Strategy
             mon_of_week = dt - timedelta(days=weekday)
             s_start = mon_of_week - timedelta(days=2) # Previous Sat
             s_end = mon_of_week + timedelta(days=6)   # Next Sun
-            
-            # Simple cost estimate: 5 days - 1 (holiday) = 4 leaves usually
             s_leaves = 4 
             s_range = f"{s_start.strftime('%d %b')} - {s_end.strftime('%d %b')}"
 
