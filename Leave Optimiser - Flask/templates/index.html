@@ -3,108 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leave Lobang King 🦁</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>Lobang King | AI Travel Strategist</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-
     <div class="container">
-        <div class="header">
-            <h1>Leave Lobang King 🦁</h1>
-            <p style="color:#94A3B8; margin-top:-5px;">The kiasu guide to maximizing your AL.</p>
-        </div>
-        
-        <div class="control-panel">
-            <div class="row">
-                <div class="input-group sm">
-                    <label>Year</label>
-                    <select id="year" onchange="triggerUpdate()">
-                        <option value="2026">2026</option>
-                        <option value="2027">2027</option>
-                    </select>
-                </div>
-                <div class="input-group sm">
-                    <label>Leaves Balance</label>
-                    <input type="number" id="leaves" value="14" onchange="triggerUpdate()">
-                </div>
-            </div>
-            
-            <div class="row">
-                <div class="input-group lg">
-                    <label>Origin</label>
-                    <input type="text" id="fromInput" value="Singapore">
-                    <div id="fromList" class="suggestions"></div>
-                </div>
-                <div class="input-group lg">
-                    <label>Destination</label>
-                    <input type="text" id="toInput" placeholder="e.g. Tokyo">
+        <header class="main-header">
+            <h1>🦁 Lobang King</h1>
+            <p>PhD-Level AI Trip Planning for Singaporeans</p>
+        </header>
+
+        <section class="input-panel card">
+            <div class="input-row">
+                <div class="input-group search-container">
+                    <label>Where to?</label>
+                    <input type="text" id="toInput" placeholder="e.g. Tokyo, Bangkok, London" autocomplete="off">
                     <div id="toList" class="suggestions"></div>
                 </div>
-            </div>
-        </div>
-
-        <div id="holidayNav" class="holiday-nav">
-            <div style="color:#64748B; font-size:14px; padding:20px;">Start by searching for a destination above...</div>
-        </div>
-
-        <div id="dashboard" class="dashboard hidden">
-            <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:15px; margin-bottom:20px;">
-                    <div>
-                        <h2>✈️ Trip Plan</h2>
-                        <div id="routeTitle" style="color:#94A3B8; font-size:14px;">SIN ➝ DEST</div>
-                    </div>
-                    
-                    <div class="toggle-container">
-                        <label class="switch-label">Strategy:</label>
-                        <div class="strategy-toggle">
-                            <button id="btnLobang" class="active" onclick="setStrategy('lobang')">Quick</button>
-                            <button id="btnShiok" onclick="setStrategy('shiok')">Max (9 Days)</button>
-                        </div>
-                    </div>
-                </div>
                 
-                <div class="grid">
-                    <div class="stat-box">
-                        <span class="label">DATES</span>
-                        <span class="val" id="dateRange">-</span>
-                        <span class="sub" id="daysOffVal">-</span>
-                    </div>
-                    <div class="stat-box weather">
-                        <span class="label">WEATHER</span>
-                        <span class="val" id="weatherVal">-</span>
-                        <span class="sub">Forecast</span>
-                    </div>
-                    <div class="stat-box budget">
-                        <span class="label">BUDGET</span>
-                        <span class="val" id="budgetVal">-</span>
-                        <span class="sub" id="distVal">-</span>
-                    </div>
-                    <div class="stat-box leaves">
-                        <span class="label">COST</span>
-                        <span class="val" id="leavesVal">-</span>
-                        <span class="sub">Leaves Used</span>
-                    </div>
+                <div class="input-group">
+                    <label>Leave Balance</label>
+                    <input type="number" id="leaves" value="14" min="0">
+                </div>
+
+                <div class="input-group">
+                    <label>Year</label>
+                    <select id="year">
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                    </select>
                 </div>
             </div>
 
-            <div class="card">
-                <h2>📖 Lobang Guide</h2>
-                <div class="guide-section">
-                    <h4>🗺️ Best Sights</h4>
-                    <div id="seeList"></div>
+            <div class="budget-selector">
+                <label>Budget Style: <span id="budgetText">Mid-Range ($$)</span></label>
+                <input type="range" id="budgetSlider" min="1" max="3" value="2" step="1" oninput="updateBudgetLabel(this.value)">
+            </div>
+        </section>
+
+        <main id="dashboard" class="hidden">
+            <div class="trip-header card">
+                <p>Singapore → Select Destination</p>
+                <h2 id="dateRange">Thinking...</h2>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box card">
+                    <span class="label">Weather</span>
+                    <span id="weatherVal" class="value">--</span>
                 </div>
-                <div class="guide-section">
-                    <h4>🍜 Must Eat</h4>
-                    <div id="eatList"></div>
+                <div class="stat-box card">
+                    <span class="label">Distance</span>
+                    <span id="distVal" class="value">--</span>
+                </div>
+                <div class="stat-box card budget-highlight">
+                    <span class="label">Est. Budget</span>
+                    <span id="budgetVal" class="value">--</span>
+                </div>
+                <div class="stat-box card leaves-highlight">
+                    <span class="label">Leave Strategy</span>
+                    <span id="leavesVal" class="value">--</span>
                 </div>
             </div>
-        </div>
+
+            <div class="content-grid">
+                <div class="guide-card card">
+                    <h3>🗼 Best Sights</h3>
+                    <div id="seeList" class="guide-list"></div>
+                </div>
+                <div class="guide-card card">
+                    <h3>🍜 Local Eats</h3>
+                    <div id="eatList" class="guide-list"></div>
+                </div>
+            </div>
+        </main>
     </div>
 
-    <script src="/static/script.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        function updateBudgetLabel(val) {
+            const labels = { 1: 'Budget ($)', 2: 'Mid-Range ($$)', 3: 'Luxury ($$$)' };
+            document.getElementById('budgetText').innerText = labels[val];
+        }
+    </script>
 </body>
 </html>
-
-
