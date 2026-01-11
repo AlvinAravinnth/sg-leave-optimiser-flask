@@ -5,71 +5,125 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
-# --- HELPER FUNCTIONS ---
-def get_weather(lat, lng):
+# --- 1. ROBUST GUIDE FETCHER (Fixes "No Data") ---
+def get_wikivoyage(query):
+    # Strip country for better wiki matches (e.g. "Tokyo, Japan" -> "Tokyo")
+    clean_query = query.split(',')[0].strip()
+    
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current_weather=true"
-        data = requests.get(url, timeout=2).json()
-        return f"{data['current_weather']['temperature']}°C"
-    except: return "N/A"
-
-def get_wikivoyage(city):
-    try:
-        # 1. Search for Page
-        r = requests.get("https://en.wikivoyage.org/w/api.php", params={"action": "query", "list": "search", "srsearch": city, "format": "json"}).json()
-        if not r.get('query', {}).get('search'): return None
-        title = r['query']['search'][0]['title']
+        # 1. Search for the best matching page title
+        r1 = requests.get("https://en.wikivoyage.org/w/api.php", 
+                         params={"action": "query", "list": "search", "srsearch": clean_query, "format": "json"}).json()
         
-        # 2. Get Content
-        r2 = requests.get("https://en.wikivoyage.org/w/api.php", params={"action": "query", "prop": "extracts", "titles": title, "explaintext": 1, "format": "json"}).json()
+        if not r1.get('query', {}).get('search'):
+            return None
+            
+        title = r1['query']['search'][0]['title']
+
+        # 2. Get the content
+        r2 = requests.get("https://en.wikivoyage.org/w/api.php", 
+                         params={"action": "query", "prop": "extracts", "titles": title, "explaintext": 1, "format": "json"}).json()
+        
         page = next(iter(r2['query']['pages'].values()))
         text = page.get('extract', '')
 
-        # 3. Smart Extraction
-        def extract(section_names):
+        # 3. Extract Sections
+        def extract_items(headers):
             items = []
-            for name in section_names:
-                start = text.find(f"== {name} ==")
+            for header in headers:
+                start = text.find(f"== {header} ==")
                 if start != -1:
-                    lines = text[start:].split('\n')[1:]
-                    for line in lines:
-                        if line.startswith("=="): break
-                        # Look for list items or long sentences
+                    # Grab the section text
+                    subtext = text[start:].split('\n')
+                    for line in subtext[1:]:
+                        if line.startswith("=="): break # End of section
+                        # Find bullet points
                         if "*" in line and len(line) > 20:
                             clean = line.replace("*", "").strip()
+                            # Split Title - Desc
                             parts = clean.split(" - ", 1) if " - " in clean else [clean, ""]
+                            title = parts[0]
                             desc = parts[1] if parts[1] else "Explore this highlight."
-                            items.append({"title": parts[0][:40], "desc": desc[:120]+"..."})
-                            if len(items) >= 3: return items
+                            
+                            # Clean parenthesis from title
+                            if "(" in title: title = title.split("(")[0].strip()
+                            
+                            items.append({"title": title[:40], "desc": desc[:150]+"..."})
+                            if len(items) >= 4: return items
             return items
 
-        # Try multiple section names (e.g., "See", "Do", "Sights")
-        see = extract(["See", "Do", "Sights", "Attractions"])
-        eat = extract(["Eat", "Drink", "Food"])
+        see = extract_items(["See", "Do", "Sights", "Attractions"])
+        eat = extract_items(["Eat", "Drink", "Food"])
         
-        # Fallback if empty (e.g. for Countries like "Japan")
-        if not see:
-            see = [{"title": "Explore Region", "desc": text[:150] + "..."}]
-        if not eat:
-            eat = [{"title": "Local Cuisine", "desc": "Try the local national dishes and street food."}]
+        # Fallbacks if empty
+        if not see: see = [{"title": "City Center", "desc": f"Explore the historic streets of {clean_query}."}]
+        if not eat: eat = [{"title": "Local Markets", "desc": "Try authentic local street food."}]
 
         return {"see": see, "eat": eat}
-    except: 
-        return {"see": [{"title":"Explore", "desc":"Discover local sights."}], "eat": [{"title":"Local Food", "desc":"Try local delicacies."}]}
+    except Exception as e:
+        print(f"Wiki Error: {e}")
+        return {"see": [], "eat": []}
 
-def calc_budget(lat1, lon1, lat2, lon2):
-    try:
-        R = 6371
-        dlat, dlon = radians(lat2 - lat1), radians(lon2 - lon1)
-        a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
-        c = 2 * asin(sqrt(a))
-        dist = int(R * c)
-        if dist < 1000: return f"{dist}km", "Low ($)"
-        if dist < 4000: return f"{dist}km", "Med ($$)"
-        return f"{dist}km", "High ($$$)"
-    except: return "-", "-"
+# --- 2. THE "AI" LEAVE OPTIMIZER (No Hardcoding) ---
+def optimize_leave(holiday_date_str, user_leaves):
+    # Convert string to date object
+    h_date = datetime.strptime(holiday_date_str, "%Y-%m-%d")
+    
+    # "AI" Logic: Look at the 9-day window surrounding the holiday
+    # We want to find the biggest block of OFF days we can buy with 'user_leaves'
+    
+    # 1. Define the window (start 5 days before, end 5 days after)
+    # We essentially scan a 2-week period to find the best cluster
+    window_start = h_date - timedelta(days=5)
+    best_plan = {
+        "leaves_needed": 0,
+        "days_off": 0,
+        "start_date": h_date,
+        "end_date": h_date,
+        "note": "Standard Holiday"
+    }
 
-# --- ROUTES ---
+    # Heuristic: Try to bridge to the nearest weekends
+    # Check 3 common strategies:
+    # A. Bridge Forward (Holiday + days after -> Weekend)
+    # B. Bridge Backward (Weekend + days before -> Holiday)
+    # C. Super Bridge (Weekend ... Holiday ... Weekend)
+    
+    # Simplification for this demo:
+    # Find the Monday of the holiday week
+    monday_of_week = h_date - timedelta(days=h_date.weekday())
+    sat_before = monday_of_week - timedelta(days=2)
+    sun_after = monday_of_week + timedelta(days=6)
+    
+    # Calculate workdays in this SAT-SUN block (9 days total)
+    leaves_to_burn = 0
+    current = sat_before
+    while current <= sun_after:
+        # If it's a weekday AND not the holiday, we need a leave
+        if current.weekday() < 5 and current.date() != h_date.date():
+            leaves_to_burn += 1
+        current += timedelta(days=1)
+        
+    # Decision Engine
+    if leaves_to_burn <= user_leaves:
+        return {
+            "leaves": leaves_to_burn,
+            "off": 9,
+            "range": f"{sat_before.strftime('%d %b')} - {sun_after.strftime('%d %b')}",
+            "note": "Maximize 9-Day Block"
+        }
+    else:
+        # Fallback: Just a long weekend
+        # If holiday is Fri/Mon -> 3 days. If Tue/Thu -> Take 1 to make 4.
+        wd = h_date.weekday()
+        if wd == 1: # Tue -> Take Mon
+            return {"leaves": 1, "off": 4, "range": f"{(h_date-timedelta(days=3)).strftime('%d %b')} - {h_date.strftime('%d %b')}", "note": "4-Day Long Weekend"}
+        elif wd == 3: # Thu -> Take Fri
+            return {"leaves": 1, "off": 4, "range": f"{h_date.strftime('%d %b')} - {(h_date+timedelta(days=3)).strftime('%d %b')}", "note": "4-Day Long Weekend"}
+        
+        return {"leaves": 0, "off": 3, "range": "Long Weekend", "note": "Standard Break"}
+
+# --- 3. ROUTES ---
 
 @app.route('/')
 def home():
@@ -89,43 +143,42 @@ def search_city():
 def plan_trip():
     data = request.json
     year = int(data.get('year'))
-    f_lat, f_lng = data['from']['latitude'], data['from']['longitude']
-    t_lat, t_lng = data['to']['latitude'], data['to']['longitude']
-    city_name = data['to']['name']
+    leaves_balance = int(data.get('leavesLeft', 14))
+    
+    # Locations
+    f_lat = data['from']['latitude']
+    f_lng = data['from']['longitude']
+    t_lat = data['to']['latitude']
+    t_lng = data['to']['longitude']
+    city_name = data['to']['name'] # e.g. "Tokyo"
 
-    # Weather & Budget
-    weather = get_weather(t_lat, t_lng)
-    dist, budget = calc_budget(f_lat, f_lng, t_lat, t_lng)
-    guide = get_wikivoyage(city_name)
-
-    # Holiday Logic
+    # 1. Weather
     try:
-        h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
-        h_data = requests.get(h_url).json()
-        holidays = []
-        for h in h_data:
-            dt = datetime.strptime(h['date'], "%Y-%m-%d")
-            # Logic: 9 Day Trip (Sat -> Sun next week)
-            # Find the Monday of that week
-            mon = dt - timedelta(days=dt.weekday())
-            start = (mon - timedelta(days=2)) # Previous Sat
-            end = (mon + timedelta(days=6))   # Next Sun
-            
-            holidays.append({
-                "name": h['localName'],
-                "date": dt.strftime("%d %b"),
-                "range": f"{start.strftime('%d %b')} - {end.strftime('%d %b')}",
-                "leaves": 4 # Simplified logic
-            })
-    except: holidays = []
+        w_url = f"https://api.open-meteo.com/v1/forecast?latitude={t_lat}&longitude={t_lng}&current_weather=true"
+        w_data = requests.get(w_url, timeout=2).json()
+        weather = f"{w_data['current_weather']['temperature']}°C"
+    except: weather = "N/A"
 
-    return jsonify({
-        "weather": weather,
-        "dist": dist,
-        "budget": budget,
-        "guide": guide,
-        "holidays": holidays
-    })
+    # 2. Budget (Haversine)
+    try:
+        R = 6371
+        dlat, dlon = radians(t_lat - f_lat), radians(t_lng - f_lng)
+        a = sin(dlat/2)**2 + cos(radians(f_lat)) * cos(radians(t_lat)) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a))
+        dist_km = int(R * c)
+        
+        if dist_km < 1000: budget = "Low ($)"
+        elif dist_km < 4000: budget = "Med ($$)"
+        else: budget = "High ($$$)"
+    except: dist_km, budget = 0, "-"
 
-if __name__ == '__main__':
-    app.run(debug=True)
+    # 3. Guide (Wikivoyage)
+    guide = get_wikivoyage(city_name)
+    if not guide: 
+        # Ultimate fallback
+        guide = {
+            "see": [{"title": "Explore City", "desc": f"Discover the main sights of {city_name}."}], 
+            "eat": [{"title": "Local Eats", "desc": "Try the famous local dishes."}]
+        }
+
+    # 4. Holiday
