@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SG Holiday Maximizer</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="container">
+        <h1>SG Holiday Maximizer ✈️</h1>
+        
+        <div class="control-panel">
+            <div class="input-group">
+                <label>Year</label>
+                <select id="year"><option>2026</option><option>2027</option></select>
+            </div>
+            
+            <div class="input-group search-group">
+                <label>Origin</label>
+                <input type="text" id="fromInput" placeholder="Singapore" value="Singapore">
+                <div id="fromList" class="suggestions"></div>
+            </div>
+
+            <div class="input-group search-group">
+                <label>Destination</label>
+                <input type="text" id="toInput" placeholder="e.g. Tokyo">
+                <div id="toList" class="suggestions"></div>
+            </div>
+        </div>
+
+        <div id="holidayNav" class="holiday-nav"></div>
+
+        <div id="dashboard" class="dashboard hidden">
+            <div class="card">
+                <h2>✈️ Logistics</h2>
+                <h3 id="routeTitle">SIN ➝ NRT</h3>
+                
+                <div class="grid">
+                    <div class="stat-box">
+                        <span class="label">TRIP WINDOW</span>
+                        <span class="val" id="dateRange">-</span>
+                        <span class="sub">9 Days Total</span>
+                    </div>
+                    <div class="stat-box weather">
+                        <span class="label">WEATHER</span>
+                        <span class="val" id="weatherVal">-</span>
+                    </div>
+                    <div class="stat-box budget">
+                        <span class="label">BUDGET</span>
+                        <span class="val" id="budgetVal">-</span>
+                        <span class="sub" id="distVal">-</span>
+                    </div>
+                    <div class="stat-box leaves">
+                        <span class="label">COST</span>
+                        <span class="val" id="leavesVal">-</span>
+                        <span class="sub">Leaves Used</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📖 Guide</h2>
+                <div class="guide-section">
+                    <h4>🗺️ Top Sights</h4>
+                    <div id="seeList"></div>
+                </div>
+                <div class="guide-section">
+                    <h4>🍜 Must Eat</h4>
+                    <div id="eatList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
