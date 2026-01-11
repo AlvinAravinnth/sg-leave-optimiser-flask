@@ -1,48 +1,26 @@
-/* --- ROOT THEME COLORS --- */
-:root {
-    --bg-dark: #0f172a;
-    --card-bg: #1e293b;
-    --text-white: #f8fafc;
-    --text-muted: #94a3b8;
-    --border-color: #334155;
-    --accent-blue: #38bdf8;
-}
-
-body {
-    background-color: var(--bg-dark);
-    color: var(--text-white);
-    font-family: 'Inter', sans-serif;
-    margin: 0;
-    padding: 20px;
-}
-
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.card {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 20px;
-}
-
-/* --- THE SIDE-BY-SIDE DASHBOARD --- */
+/* Container for the side-by-side layout */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: 1.2fr 0.8fr; /* Forces two columns */
+    grid-template-columns: 1.2fr 0.8fr; /* Left side wider than right */
     gap: 24px;
     margin-top: 24px;
     align-items: start;
 }
 
-/* --- 2x2 STATS GRID (Left Side) --- */
+/* 2x2 grid for the stats cards */
 .stats-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
     margin-top: 16px;
+}
+
+/* Card Styling */
+.card {
+    background: #1e293b; /* Deep slate background */
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 20px;
 }
 
 .stat-box {
@@ -51,23 +29,24 @@ body {
     min-height: 120px;
 }
 
-/* Left Border Accents */
+/* Colored Accents */
 .stat-box.dates { border-left: 4px solid #38bdf8; }
 .stat-box.weather { border-left: 4px solid #fbbf24; }
 .stat-box.budget { border-left: 4px solid #10b981; }
 .stat-box.cost { border-left: 4px solid #8b5cf6; }
 
+/* Text Styles */
 .stat-box .label {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: #94a3b8;
     text-transform: uppercase;
-    font-weight: bold;
-    letter-spacing: 0.05em;
+    font-weight: 700;
 }
 
 .stat-box .value {
     font-size: 1.5rem;
     font-weight: 700;
+    color: #f8fafc;
     margin-top: 8px;
 }
 
@@ -77,28 +56,18 @@ body {
     margin-top: 4px;
 }
 
-/* --- LOBANG GUIDE (Right Side) --- */
-.guide-section h3 {
-    margin-top: 0;
-    font-size: 1.25rem;
-}
-
+/* Itinerary Item Styling */
 .guide-item {
-    background: var(--bg-dark);
-    border: 1px solid var(--border-color);
+    background: #111827;
+    border: 1px solid #374151;
     padding: 12px;
     margin-bottom: 12px;
     border-radius: 8px;
 }
 
-.guide-title {
-    color: var(--accent-blue);
-    font-weight: bold;
-    display: block;
-    margin-bottom: 4px;
-}
-
-.guide-desc {
-    font-size: 0.9rem;
-    color: var(--text-muted);
+/* Responsive adjustment: stack on small screens */
+@media (max-width: 900px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
 }
