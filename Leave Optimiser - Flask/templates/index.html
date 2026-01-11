@@ -38,52 +38,37 @@
             </div>
         </section>
 
-        <main id="dashboard" class="dashboard-grid">
-            <div class="plan-section">
-                <div class="section-header">
-                    <h2>✈️ Trip Plan</h2>
-                    <div class="strategy-toggle">
-                        <span>STRATEGY:</span>
-                        <button class="active">Quick</button>
-                        <button>Max (9 Days)</button>
-                    </div>
-                </div>
-                <p class="dest-label">SIN → <span id="destName">DEST</span></p>
-                
-                <div class="stats-grid">
-                    <div class="stat-box card dates">
-                        <span class="label">DATES</span>
-                        <span id="dateRange" class="value">-</span>
-                    </div>
-                    <div class="stat-box card weather">
-                        <span class="label">WEATHER</span>
-                        <span id="weatherVal" class="value">-</span>
-                        <span class="sub">Forecast</span>
-                    </div>
-                    <div class="stat-box card budget">
-                        <span class="label">BUDGET</span>
-                        <span id="budgetVal" class="value">-</span>
-                        <span class="sub" id="distVal">--</span>
-                    </div>
-                    <div class="stat-box card cost">
-                        <span class="label">COST</span>
-                        <span id="leavesVal" class="value">-</span>
-                        <span class="sub">Leaves Used</span>
-                    </div>
-                </div>
+       <main id="dashboard" class="dashboard-grid">
+    <div class="plan-section">
+        <h2>✈️ Trip Plan</h2>
+        <div class="stats-grid">
+            <div class="stat-box card dates">
+                <span class="label">DATES</span>
+                <span id="dateRange" class="value">-</span>
             </div>
+            <div class="stat-box card weather">
+                <span class="label">WEATHER</span>
+                <span id="weatherVal" class="value">-</span>
+            </div>
+            <div class="stat-box card budget">
+                <span class="label">BUDGET</span>
+                <span id="budgetVal" class="value">-</span>
+            </div>
+            <div class="stat-box card cost">
+                <span class="label">COST</span>
+                <span id="leavesVal" class="value">-</span>
+            </div>
+        </div>
+    </div>
 
-            <div class="guide-section card">
-                <h3>📖 Lobang Guide</h3>
-                <div class="guide-content">
-                    <h4>🗺️ Best Sights</h4>
-                    <div id="seeList"></div>
-                    <h4>🍜 Must Eat</h4>
-                    <div id="eatList"></div>
-                </div>
-            </div>
-        </main>
+    <div class="guide-section card">
+        <h3>📖 Lobang Guide</h3>
+        <div id="seeList"></div>
+        <div id="eatList"></div>
+    </div>
+</main>
     </div>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
+
