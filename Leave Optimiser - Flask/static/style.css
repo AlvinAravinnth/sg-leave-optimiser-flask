@@ -1,28 +1,7 @@
-:root {
-    --bg-color: #0f172a;
-    --card-bg: #1e293b;
-    --text-main: #f8fafc;
-    --accent-blue: #38bdf8;
-    --border-color: #334155;
-}
-
-body {
-    background-color: var(--bg-color);
-    color: var(--text-main);
-    font-family: 'Inter', sans-serif;
-    margin: 0; padding: 20px;
-}
-
-.card {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 20px;
-}
-
+/* Reverting to the 2nd Picture's Dashboard Layout */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr; /* Side-by-side layout */
     gap: 24px;
     margin-top: 24px;
 }
@@ -34,29 +13,35 @@ body {
     margin-top: 16px;
 }
 
+/* Card Styling for individual stat boxes */
 .stat-box {
     display: flex;
     flex-direction: column;
-    min-height: 100px;
+    padding: 20px;
+    min-height: 120px;
 }
 
-.stat-box .label { font-size: 0.8rem; color: #94a3b8; font-weight: bold; }
-.stat-box .value { font-size: 1.4rem; font-weight: bold; margin-top: 8px; }
-
-/* Colors from previous version */
-.stat-box.dates { border-left: 4px solid #10b981; }
-.stat-box.weather { border-left: 4px solid #f59e0b; }
+/* Restoring the specific color accents for each card */
+.stat-box.dates { border-left: 4px solid #38bdf8; }
+.stat-box.weather { border-left: 4px solid #fbbf24; }
 .stat-box.budget { border-left: 4px solid #10b981; }
 .stat-box.cost { border-left: 4px solid #8b5cf6; }
 
-.guide-item {
-    background: #1e293b;
-    border: 1px solid #334155;
-    padding: 12px;
-    margin-bottom: 12px;
-    border-radius: 8px;
+.stat-box .label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
-.guide-title { color: var(--accent-blue); font-weight: bold; display: block; }
-.guide-desc { font-size: 0.9rem; color: #cbd5e1; }
 
-.hidden { display: none; }
+.stat-box .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-top: 8px;
+}
+
+.stat-box .sub {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 4px;
+}
