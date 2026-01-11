@@ -17,50 +17,42 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 client = None
 if GEMINI_API_KEY:
     try:
-        # Using the new SDK client
         client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         print(f"⚠️ SDK Init Error: {e}")
 else:
     print("⚠️ Warning: GEMINI_API_KEY not found.")
 
-# --- 1. CACHING SYSTEM ---
 CITY_CACHE = {}
 
-# --- 2. SMART GUIDE (Gemini AI) ---
+# --- SMART GUIDE ---
 def get_travel_guide(city):
     cache_key = city.lower().strip()
-    if cache_key in CITY_CACHE:
-        return CITY_CACHE[cache_key]
+    if cache_key in CITY_CACHE: return CITY_CACHE[cache_key]
 
-    # Error-Reporting Fallback (Helps us debug)
     def error_guide(msg):
         return {
             "see": [{"title": "⚠️ Guide Unavailable", "desc": msg}], 
             "eat": [{"title": "Connection Error", "desc": "Please check API Key or Model."}]
         }
 
-    if not client:
-        return error_guide("API Key missing in Vercel.")
+    if not client: return error_guide("API Key missing.")
 
     try:
+        # Prompt optimized for speed (concise)
         prompt = f"""
-        I am a Singaporean tourist visiting {city}. 
-        Return a valid JSON object with exactly two keys: "see" and "eat".
-        "see": List of 3 top tourist attractions (dictionaries with "title" and "desc").
-        "eat": List of 3 famous local foods (dictionaries with "title" and "desc").
-        Keep descriptions short (under 15 words).
-        IMPORTANT: Return ONLY the raw JSON string. No markdown formatting.
+        Singaporean tourist visiting {city}. 
+        Return JSON with keys "see" (3 sights) and "eat" (3 foods).
+        Format: {{ "see": [{{"title": "...", "desc": "..."}}], "eat": [...] }}
+        Descriptions max 12 words. Raw JSON only.
         """
         
-        # Using gemini-2.0-flash-exp (Confirmed working for you)
         response = client.models.generate_content(
-             model="gemini-3-flash-preview",
+            model='gemini-2.0-flash-exp',
             contents=prompt
         )
         
         text = response.text.strip()
-        # Clean Markdown
         if "```" in text:
             text = text.split("```")[1]
             if text.startswith("json"): text = text[4:]
@@ -70,11 +62,9 @@ def get_travel_guide(city):
         return data
 
     except Exception as e:
-        print(f"❌ AI Error: {e}")
-        # Return the actual error to the UI so we can see it
         return error_guide(str(e)[:100])
 
-# --- 3. HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS ---
 def get_weather(lat, lng):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current_weather=true"
@@ -90,12 +80,12 @@ def calc_budget(lat1, lon1, lat2, lon2):
         c = 2 * asin(sqrt(a))
         dist = int(R * c)
         
-        if dist < 1000: return f"{dist}km", "Low ($)"
-        elif dist < 4000: return f"{dist}km", "Med ($$)"
-        else: return f"{dist}km", "High ($$$)"
-    except: return "-", "-"
+        if dist < 1500: return dist, "Low ($)"       # KL, Penang, Phuket
+        elif dist < 4500: return dist, "Med ($$)"    # Hong Kong, Taiwan, Perth
+        else: return dist, "High ($$$)"              # Japan, Europe, USA
+    except: return 0, "-"
 
-# --- 4. ROUTES ---
+# --- ROUTES ---
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -114,83 +104,85 @@ def search_city():
 def plan_trip():
     data = request.json
     year = int(data.get('year'))
-    f_lat = data['from']['latitude']
-    f_lng = data['from']['longitude']
-    t_lat = data['to']['latitude']
-    t_lng = data['to']['longitude']
     city = data['to']['name']
-
+    
+    # 1. Math Calculations (Fast)
+    f_lat, f_lng = data['from']['latitude'], data['from']['longitude']
+    t_lat, t_lng = data['to']['latitude'], data['to']['longitude']
+    
     weather = get_weather(t_lat, t_lng)
+    dist_val, budget = calc_budget(f_lat, f_lng, t_lat, t_lng)
     
-    # Unpack budget tuple (dist_str, cost_str)
-    dist, budget = calc_budget(f_lat, f_lng, t_lat, t_lng)
+    # 2. Smart Duration Logic (The "AI" Brain)
+    # If far away (>4000km), "Quick" trip should be longer (e.g. 6 days)
+    is_long_haul = dist_val > 4000 
     
+    # 3. AI Guide (Slow - takes ~2-3s)
     guide = get_travel_guide(city)
 
     holidays = []
     try:
         h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
         h_data = requests.get(h_url).json()
+        
         for h in h_data:
             dt = datetime.strptime(h['date'], "%Y-%m-%d")
-            weekday = dt.weekday() # Mon=0
+            weekday = dt.weekday()
             
-            # --- LOBANG STRATEGY ---
+            # --- SMART STRATEGY ---
             l_leaves, l_off = 0, 3
             l_start, l_end = dt, dt
-            l_rec = "No leave needed!" # Default
+            l_rec = "No leave needed"
 
-            if weekday == 0: # Mon -> Sat-Mon
-                l_start = dt - timedelta(days=2)
-                l_end = dt
-            elif weekday == 4: # Fri -> Fri-Sun
-                l_start = dt
-                l_end = dt + timedelta(days=2)
+            # Base Logic: Standard Long Weekend (Sat-Mon or Fri-Sun)
+            if weekday == 0: # Mon holiday -> Sat-Mon
+                l_start, l_end = dt - timedelta(days=2), dt
+            elif weekday == 4: # Fri holiday -> Fri-Sun
+                l_start, l_end = dt, dt + timedelta(days=2)
             elif weekday == 1: # Tue -> Take Mon
-                l_start = dt - timedelta(days=3)
-                l_end = dt
+                l_start, l_end = dt - timedelta(days=3), dt
                 l_leaves, l_off = 1, 4
-                l_rec = f"Take leave on {(dt - timedelta(days=1)).strftime('%a %d %b')}"
+                l_rec = f"Take {(dt - timedelta(days=1)).strftime('%a %d')}"
             elif weekday == 3: # Thu -> Take Fri
-                l_start = dt
-                l_end = dt + timedelta(days=3)
+                l_start, l_end = dt, dt + timedelta(days=3)
                 l_leaves, l_off = 1, 4
-                l_rec = f"Take leave on {(dt + timedelta(days=1)).strftime('%a %d %b')}"
-            elif weekday == 2: # Wed -> Take Thu/Fri
-                l_start = dt
-                l_end = dt + timedelta(days=4)
-                l_leaves, l_off = 2, 5
-                d1 = (dt+timedelta(days=1)).strftime('%a %d %b')
-                d2 = (dt+timedelta(days=2)).strftime('%a %d %b')
-                l_rec = f"Take leave on {d1} & {d2}"
+                l_rec = f"Take {(dt + timedelta(days=1)).strftime('%a %d')}"
+            else: # Wed or Weekend -> Standard
+                l_start, l_end = dt, dt
+            
+            # AI UPGRADE: If Long Haul, extend the "Quick" trip
+            if is_long_haul:
+                # Add 2 more buffer days (e.g. Turn 4 days into 6 days)
+                l_end = l_end + timedelta(days=2)
+                l_leaves += 2
+                l_off += 2
+                l_rec += " + 2 Days"
 
             l_range = f"{l_start.strftime('%d %b')} - {l_end.strftime('%d %b')}"
 
-            # --- SHIOK STRATEGY ---
+            # Shiok Strategy (Always 9 days)
             mon_of_week = dt - timedelta(days=weekday)
             s_start = mon_of_week - timedelta(days=2)
             s_end = mon_of_week + timedelta(days=6)
             s_range = f"{s_start.strftime('%d %b')} - {s_end.strftime('%d %b')}"
-            s_rec = "Clear the week"
 
             holidays.append({
                 "name": h['localName'],
                 "date": dt.strftime("%d %b"),
                 "strategies": {
                     "lobang": {"range": l_range, "off": l_off, "leaves": l_leaves, "rec": l_rec},
-                    "shiok": {"range": s_range, "off": 9, "leaves": 4, "rec": s_rec}
+                    "shiok": {"range": s_range, "off": 9, "leaves": 4, "rec": "Clear week"}
                 }
             })
     except Exception as e: print(e)
 
     return jsonify({
         "weather": weather,
-        "dist": dist,     # Send dist separately
-        "budget": budget, # Send budget separately
+        "dist": f"{dist_val}km",
+        "budget": budget,
         "guide": guide,
         "holidays": holidays
     })
 
 if __name__ == '__main__':
     app.run(debug=True)
-
