@@ -12,7 +12,7 @@
     <div class="container">
         <div class="header">
             <h1>Leave Lobang King 🦁</h1>
-            <p style="color:#94A3B8; margin-top:-10px;">Maximize your MC... I mean AL.</p>
+            <p style="color:#94A3B8; margin-top:-5px;">The kiasu guide to maximizing your AL.</p>
         </div>
         
         <div class="control-panel">
@@ -24,7 +24,6 @@
                         <option value="2027">2027</option>
                     </select>
                 </div>
-
                 <div class="input-group sm">
                     <label>Leaves Balance</label>
                     <input type="number" id="leaves" value="14" onchange="triggerUpdate()">
@@ -37,29 +36,40 @@
                     <input type="text" id="fromInput" value="Singapore">
                     <div id="fromList" class="suggestions"></div>
                 </div>
-
                 <div class="input-group lg">
                     <label>Destination</label>
-                    <input type="text" id="toInput" placeholder="Where you going? (e.g. Bangkok)">
+                    <input type="text" id="toInput" placeholder="e.g. Tokyo">
                     <div id="toList" class="suggestions"></div>
                 </div>
             </div>
         </div>
 
         <div id="holidayNav" class="holiday-nav">
-            <div style="color:#64748B; font-size:14px; padding:20px;">Select a destination to start planning...</div>
+            <div style="color:#64748B; font-size:14px; padding:20px;">Start by searching for a destination above...</div>
         </div>
 
         <div id="dashboard" class="dashboard hidden">
             <div class="card">
-                <h2>✈️ Trip Logistics</h2>
-                <h3 id="routeTitle" style="color:#E2E8F0; margin-bottom:20px; border-bottom:1px solid #334155; padding-bottom:10px;">SIN ➝ BKK</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:15px; margin-bottom:20px;">
+                    <div>
+                        <h2>✈️ Trip Plan</h2>
+                        <div id="routeTitle" style="color:#94A3B8; font-size:14px;">SIN ➝ DEST</div>
+                    </div>
+                    
+                    <div class="toggle-container">
+                        <label class="switch-label">Strategy:</label>
+                        <div class="strategy-toggle">
+                            <button id="btnLobang" class="active" onclick="setStrategy('lobang')">Quick</button>
+                            <button id="btnShiok" onclick="setStrategy('shiok')">Max (9 Days)</button>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="grid">
                     <div class="stat-box">
-                        <span class="label">TRIP WINDOW</span>
+                        <span class="label">DATES</span>
                         <span class="val" id="dateRange">-</span>
-                        <span class="sub" id="daysOffVal">9 Days Off</span>
+                        <span class="sub" id="daysOffVal">-</span>
                     </div>
                     <div class="stat-box weather">
                         <span class="label">WEATHER</span>
@@ -67,7 +77,7 @@
                         <span class="sub">Forecast</span>
                     </div>
                     <div class="stat-box budget">
-                        <span class="label">EST. BUDGET</span>
+                        <span class="label">BUDGET</span>
                         <span class="val" id="budgetVal">-</span>
                         <span class="sub" id="distVal">-</span>
                     </div>
@@ -76,10 +86,6 @@
                         <span class="val" id="leavesVal">-</span>
                         <span class="sub">Leaves Used</span>
                     </div>
-                </div>
-
-                <div class="strategy-box">
-                    <strong>💡 AI STRATEGY:</strong> <span id="aiNote">Take Mon-Fri off to clear block.</span>
                 </div>
             </div>
 
@@ -90,7 +96,7 @@
                     <div id="seeList"></div>
                 </div>
                 <div class="guide-section">
-                    <h4>🍜 Die Die Must Eat</h4>
+                    <h4>🍜 Must Eat</h4>
                     <div id="eatList"></div>
                 </div>
             </div>
