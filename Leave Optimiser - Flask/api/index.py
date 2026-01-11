@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, render_template
 import requests
 from google import genai
+from google.genai import types
 import json
 import os
 from datetime import datetime, timedelta
@@ -8,85 +9,63 @@ from math import radians, cos, sin, asin, sqrt
 from dotenv import load_dotenv
 
 load_dotenv()
-
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
 # --- CONFIGURATION ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
 client = None
+
 if GEMINI_API_KEY:
     try:
-        # Initializing the new SDK client for reasoning-capable models
+        # Initializing the new Google Gen AI SDK
         client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         print(f"⚠️ SDK Init Error: {e}")
-else:
-    print("⚠️ Warning: GEMINI_API_KEY not found.")
 
-CITY_CACHE = {}
-
-# --- SMART GUIDE (Reasoning-Capable Gemini 3 Flash) ---
-def get_travel_guide(city):
-    cache_key = city.lower().strip()
-    if cache_key in CITY_CACHE: return CITY_CACHE[cache_key]
-
-    def error_guide(msg):
-        return {
-            "see": [{"title": "⚠️ Guide Unavailable", "desc": msg}], 
-            "eat": [{"title": "Connection Error", "desc": "Check API Key status."}]
-        }
-
-    if not client: return error_guide("API Key missing.")
-
+# --- AGENTIC REASONING: Gemini 3 Flash ---
+def get_ai_decision(city, leave_balance, dist_val):
+    if not client: return None
+    
+    # Prompt optimized for Gemini 3's reasoning capabilities
+    prompt = f"""
+    Reason through the following constraints as an expert travel agent:
+    - User Leave Balance: {leave_balance} days.
+    - Destination: {city} ({dist_val}km from Singapore).
+    
+    HEAVY LIFTING TASKS:
+    1. Duration: Decide the optimal number of days to stay. If distance > 4000km, aim for 7-10 days.
+    2. Leave Strategy: Suggest exactly which days to take leave to maximize the trip.
+    3. Detailed Budget: Estimate total cost in SGD, broken down by Flights, Hotel, and Daily Food/Transport.
+    
+    Return ONLY a valid JSON object:
+    {{
+      "suggested_duration": "X days",
+      "leave_recommendation": "Take leave on...",
+      "budget": {{"total": "SGD X", "breakdown": "..."}},
+      "itinerary": {{"see": [...], "eat": [...]}}
+    }}
+    """
     try:
-        # Prompt optimized for Gemini 3's reasoning behavior
-        prompt = f"""
-        I am a Singaporean tourist visiting {city}. 
-        Return a valid JSON object with:
-        "see": List of 3 top tourist attractions (dictionaries with "title" and "desc").
-        "eat": List of 3 famous local foods (dictionaries with "title" and "desc").
-        Keep descriptions under 12 words. Return ONLY raw JSON.
-        """
-        
-        # Using the advanced gemini-3-flash-preview model
+        # Calling the reasoning model with HIGH thinking level
         response = client.models.generate_content(
             model='gemini-3-flash-preview',
-            contents=prompt
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level="high"),
+                response_mime_type="application/json"
+            )
         )
-        
-        text = response.text.strip()
-        if "```" in text:
-            text = text.split("```")[1]
-            if text.startswith("json"): text = text[4:]
-        
-        data = json.loads(text.strip())
-        CITY_CACHE[cache_key] = data
-        return data
-
+        return json.loads(response.text)
     except Exception as e:
-        return error_guide(str(e)[:100])
+        print(f"❌ AI Error: {e}")
+        return None
 
-# --- HELPER FUNCTIONS ---
-def get_weather(lat, lng):
-    try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current_weather=true"
-        data = requests.get(url, timeout=1).json()
-        return f"{data['current_weather']['temperature']}°C"
-    except: return "N/A"
-
-def calc_budget(lat1, lon1, lat2, lon2):
-    try:
-        R = 6371 
-        dlat, dlon = radians(lat2 - lat1), radians(lon2 - lon1)
-        a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
-        c = 2 * asin(sqrt(a))
-        dist = int(R * c)
-        
-        if dist < 1500: return dist, "Low ($)"
-        elif dist < 4500: return dist, "Med ($$)"
-        else: return dist, "High ($$$)"
-    except: return 0, "-"
+# --- HELPER: Distance Logic ---
+def calc_dist(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat, dlon = radians(lat2-lat1), radians(lon2-lon1)
+    a = sin(dlat/2)**2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)**2
+    return int(R * 2 * asin(sqrt(a)))
 
 # --- ROUTES ---
 @app.route('/')
@@ -106,76 +85,18 @@ def search_city():
 @app.route('/api/plan', methods=['POST'])
 def plan_trip():
     data = request.json
-    year = int(data.get('year'))
     city = data['to']['name']
-    f_lat, f_lng = data['from']['latitude'], data['from']['longitude']
-    t_lat, t_lng = data['to']['latitude'], data['to']['longitude']
+    leaves = data.get('leavesLeft', 14)
     
-    weather = get_weather(t_lat, t_lng)
-    dist_val, budget = calc_budget(f_lat, f_lng, t_lat, t_lng)
+    # Calculate physical distance for AI context
+    dist = calc_dist(1.3521, 103.8198, data['to']['latitude'], data['to']['longitude'])
     
-    # SMART DURATION: If long haul (>4000km), automatically suggest a longer stay
-    is_long_haul = dist_val > 4000 
-    guide = get_travel_guide(city)
-
-    holidays = []
-    try:
-        h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
-        h_data = requests.get(h_url).json()
-        for h in h_data:
-            dt = datetime.strptime(h['date'], "%Y-%m-%d")
-            weekday = dt.weekday()
-            
-            l_leaves, l_off = 0, 3
-            l_start, l_end = dt, dt
-            l_rec = "No leave needed"
-
-            if weekday == 0: # Monday holiday
-                l_start, l_end = dt - timedelta(days=2), dt
-            elif weekday == 4: # Friday holiday
-                l_start, l_end = dt, dt + timedelta(days=2)
-            elif weekday == 1: # Tuesday
-                l_start, l_end = dt - timedelta(days=3), dt
-                l_leaves, l_off = 1, 4
-                l_rec = f"Take leave on {(dt - timedelta(days=1)).strftime('%a %d %b')}"
-            elif weekday == 3: # Thursday
-                l_start, l_end = dt, dt + timedelta(days=3)
-                l_leaves, l_off = 1, 4
-                l_rec = f"Take leave on {(dt + timedelta(days=1)).strftime('%a %d %b')}"
-            elif weekday == 2: # Wednesday
-                l_start, l_end = dt, dt + timedelta(days=4)
-                l_leaves, l_off = 2, 5
-                d1 = (dt + timedelta(days=1)).strftime('%a %d %b')
-                d2 = (dt + timedelta(days=2)).strftime('%a %d %b')
-                l_rec = f"Take leave on {d1} and {d2}"
-
-            if is_long_haul:
-                l_end += timedelta(days=2)
-                l_leaves += 2
-                l_off += 2
-                l_rec += " plus 2 extra days for travel"
-
-            l_range = f"{l_start.strftime('%d %b')} - {l_end.strftime('%d %b')}"
-            
-            mon_of_week = dt - timedelta(days=weekday)
-            s_range = f"{(mon_of_week - timedelta(days=2)).strftime('%d %b')} - {(mon_of_week + timedelta(days=6)).strftime('%d %b')}"
-
-            holidays.append({
-                "name": h['localName'],
-                "date": dt.strftime("%d %b"),
-                "strategies": {
-                    "lobang": {"range": l_range, "off": l_off, "leaves": l_leaves, "rec": l_rec},
-                    "shiok": {"range": s_range, "off": 9, "leaves": 4, "rec": "Clear the entire week"}
-                }
-            })
-    except Exception as e: print(e)
-
+    # Delegate "Heavy Work" to reasoning model
+    ai_plan = get_ai_decision(city, leaves, dist)
+    
     return jsonify({
-        "weather": weather,
-        "dist": f"{dist_val}km",
-        "budget": budget,
-        "guide": guide,
-        "holidays": holidays
+        "dist": f"{dist}km",
+        "ai": ai_plan
     })
 
 if __name__ == '__main__':
