@@ -24,12 +24,13 @@ document.getElementById('toInput').addEventListener('input', async (e) => {
 async function generatePlan() {
     if (!selectedCity) return;
     
-    // 1. Instant Header Update
-    document.getElementById('destName').innerText = selectedCity.name;
-    document.getElementById('dashboard').classList.remove('hidden');
+    // Show dashboard immediately
+    const dashboard = document.getElementById('dashboard');
+    dashboard.classList.remove('hidden');
     
-    // 2. Loading State
-    document.getElementById('seeList').innerHTML = '<div class="shimmer">Gemini 3 is thinking...</div>';
+    // Set loading state
+    document.getElementById('destName').innerText = selectedCity.name;
+    document.getElementById('seeList').innerHTML = '<p>Gemini 3 is thinking...</p>';
 
     const res = await fetch('/api/plan', {
         method: 'POST',
@@ -57,3 +58,4 @@ function renderGuide(itin) {
     itin.see.forEach(i => see.innerHTML += `<div class="guide-item"><b>${i.title}</b><p>${i.desc}</p></div>`);
     itin.eat.forEach(i => eat.innerHTML += `<div class="guide-item"><b>${i.title}</b><p>${i.desc}</p></div>`);
 }
+
