@@ -5,123 +5,132 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
-# --- 1. ROBUST GUIDE FETCHER (Fixes "No Data") ---
-def get_wikivoyage(query):
-    # Strip country for better wiki matches (e.g. "Tokyo, Japan" -> "Tokyo")
-    clean_query = query.split(',')[0].strip()
-    
+# --- 1. SMART GUIDE FETCHER (GPS + Country Fallback) ---
+def get_wikivoyage(city, country, lat, lng):
     try:
-        # 1. Search for the best matching page title
-        r1 = requests.get("https://en.wikivoyage.org/w/api.php", 
-                         params={"action": "query", "list": "search", "srsearch": clean_query, "format": "json"}).json()
-        
-        if not r1.get('query', {}).get('search'):
-            return None
-            
-        title = r1['query']['search'][0]['title']
+        sights = []
+        food = []
 
-        # 2. Get the content
-        r2 = requests.get("https://en.wikivoyage.org/w/api.php", 
-                         params={"action": "query", "prop": "extracts", "titles": title, "explaintext": 1, "format": "json"}).json()
-        
-        page = next(iter(r2['query']['pages'].values()))
-        text = page.get('extract', '')
+        # A. FETCH SIGHTS via GPS (Geosearch) - Accurate for big cities
+        # Finds wiki pages within 10km of the destination
+        geo_url = "https://en.wikivoyage.org/w/api.php"
+        geo_params = {
+            "action": "query", "list": "geosearch", 
+            "gscoord": f"{lat}|{lng}", "gsradius": 10000, "gslimit": 5, "format": "json"
+        }
+        r_geo = requests.get(geo_url, params=geo_params, timeout=2).json()
+        if 'query' in r_geo and 'geosearch' in r_geo['query']:
+            for item in r_geo['query']['geosearch']:
+                # Get snippet for this place
+                sights.append({"title": item['title'], "desc": "Popular local attraction."})
 
-        # 3. Extract Sections
-        def extract_items(headers):
+        # B. FETCH FOOD via Text Search (City first, then Country)
+        def scrape_section(query, section_names):
+            # 1. Search page
+            r1 = requests.get("https://en.wikivoyage.org/w/api.php", 
+                             params={"action": "query", "list": "search", "srsearch": query, "format": "json"}).json()
+            if not r1.get('query', {}).get('search'): return []
+            title = r1['query']['search'][0]['title']
+
+            # 2. Get content
+            r2 = requests.get("https://en.wikivoyage.org/w/api.php", 
+                             params={"action": "query", "prop": "extracts", "titles": title, "explaintext": 1, "format": "json"}).json()
+            page = next(iter(r2['query']['pages'].values()))
+            text = page.get('extract', '')
+
+            # 3. Extract items
             items = []
-            for header in headers:
-                start = text.find(f"== {header} ==")
+            for name in section_names:
+                start = text.find(f"== {name} ==")
                 if start != -1:
-                    # Grab the section text
-                    subtext = text[start:].split('\n')
-                    for line in subtext[1:]:
-                        if line.startswith("=="): break # End of section
-                        # Find bullet points
-                        if "*" in line and len(line) > 20:
+                    lines = text[start:].split('\n')[1:]
+                    for line in lines:
+                        if line.startswith("=="): break
+                        if "*" in line and len(line) > 15:
                             clean = line.replace("*", "").strip()
-                            # Split Title - Desc
                             parts = clean.split(" - ", 1) if " - " in clean else [clean, ""]
-                            title = parts[0]
-                            desc = parts[1] if parts[1] else "Explore this highlight."
-                            
-                            # Clean parenthesis from title
-                            if "(" in title: title = title.split("(")[0].strip()
-                            
-                            items.append({"title": title[:40], "desc": desc[:150]+"..."})
+                            desc = parts[1] if parts[1] else "Authentic local dining experience."
+                            items.append({"title": parts[0][:40], "desc": desc[:100]+"..."})
                             if len(items) >= 4: return items
             return items
 
-        see = extract_items(["See", "Do", "Sights", "Attractions"])
-        eat = extract_items(["Eat", "Drink", "Food"])
+        # Try City Food
+        food = scrape_section(city, ["Eat", "Drink", "Food"])
         
-        # Fallbacks if empty
-        if not see: see = [{"title": "City Center", "desc": f"Explore the historic streets of {clean_query}."}]
-        if not eat: eat = [{"title": "Local Markets", "desc": "Try authentic local street food."}]
+        # Fallback to Country Food if empty (e.g. "Japan" instead of "Tokyo")
+        if not food and country:
+             food = scrape_section(country, ["Eat", "Drink", "Food"])
 
-        return {"see": see, "eat": eat}
+        # Fallback Sights if GPS failed
+        if not sights:
+            s_text = scrape_section(city, ["See", "Do", "Sights"])
+            sights = s_text if s_text else [{"title": "City Center", "desc": "Explore the historic downtown."}]
+            
+        return {"see": sights[:4], "eat": food[:4]}
+
     except Exception as e:
-        print(f"Wiki Error: {e}")
+        print(f"Guide Error: {e}")
         return {"see": [], "eat": []}
 
-# --- 2. THE "AI" LEAVE OPTIMIZER (No Hardcoding) ---
-def optimize_leave(holiday_date_str, user_leaves):
-    # Convert string to date object
-    h_date = datetime.strptime(holiday_date_str, "%Y-%m-%d")
-    
-    # "AI" Logic: Look at the 9-day window surrounding the holiday
-    # We want to find the biggest block of OFF days we can buy with 'user_leaves'
-    
-    # 1. Define the window (start 5 days before, end 5 days after)
-    # We essentially scan a 2-week period to find the best cluster
-    window_start = h_date - timedelta(days=5)
-    best_plan = {
-        "leaves_needed": 0,
-        "days_off": 0,
-        "start_date": h_date,
-        "end_date": h_date,
-        "note": "Standard Holiday"
-    }
+# --- 2. DUAL STRATEGY OPTIMIZER ---
+def calculate_strategies(holiday_date, leaves_balance):
+    h_date = datetime.strptime(holiday_date, "%Y-%m-%d")
+    weekday = h_date.weekday() # Mon=0, Sun=6
 
-    # Heuristic: Try to bridge to the nearest weekends
-    # Check 3 common strategies:
-    # A. Bridge Forward (Holiday + days after -> Weekend)
-    # B. Bridge Backward (Weekend + days before -> Holiday)
-    # C. Super Bridge (Weekend ... Holiday ... Weekend)
+    # STRATEGY A: "Lobang" (Quick/Conservative)
+    # If Mon/Fri -> 3 Day weekend (0 leaves)
+    # If Tue/Wed/Thu -> 4-5 Day block (1-2 leaves)
+    lobang_plan = {}
     
-    # Simplification for this demo:
-    # Find the Monday of the holiday week
-    monday_of_week = h_date - timedelta(days=h_date.weekday())
-    sat_before = monday_of_week - timedelta(days=2)
-    sun_after = monday_of_week + timedelta(days=6)
+    if weekday == 0: # Mon
+        lobang_plan = {"name": "Long Weekend", "off": 3, "cost": 0, "start": -2, "end": 0}
+    elif weekday == 4: # Fri
+        lobang_plan = {"name": "Long Weekend", "off": 3, "cost": 0, "start": 0, "end": 2}
+    elif weekday == 1: # Tue (Take Mon)
+        lobang_plan = {"name": "4-Day Bridge", "off": 4, "cost": 1, "start": -3, "end": 0}
+    elif weekday == 3: # Thu (Take Fri)
+        lobang_plan = {"name": "4-Day Bridge", "off": 4, "cost": 1, "start": 0, "end": 3}
+    elif weekday == 2: # Wed (Take Thu/Fri or Mon/Tue)
+        lobang_plan = {"name": "5-Day Break", "off": 5, "cost": 2, "start": 0, "end": 4} # Wed-Sun
+    else: # Sat/Sun
+        lobang_plan = {"name": "Replacement Mon", "off": 3, "cost": 0, "start": 0, "end": 2}
+
+    # STRATEGY B: "Shiok" (Maximize 9 Days)
+    # Always bridging the full Sat-Sun-Mon...Sun week
+    mon_of_week = h_date - timedelta(days=weekday)
+    shiok_start_date = mon_of_week - timedelta(days=2) # Previous Sat
     
-    # Calculate workdays in this SAT-SUN block (9 days total)
-    leaves_to_burn = 0
-    current = sat_before
-    while current <= sun_after:
-        # If it's a weekday AND not the holiday, we need a leave
-        if current.weekday() < 5 and current.date() != h_date.date():
-            leaves_to_burn += 1
-        current += timedelta(days=1)
-        
-    # Decision Engine
-    if leaves_to_burn <= user_leaves:
-        return {
-            "leaves": leaves_to_burn,
+    # Calculate exact cost for 9 days (exclude Sat/Sun and the holiday itself)
+    shiok_cost = 0
+    for i in range(9):
+        day = shiok_start_date + timedelta(days=i)
+        if day.weekday() < 5 and day.date() != h_date.date():
+            shiok_cost += 1
+            
+    shiok_plan = {"name": "9-Day Vacation", "off": 9, "cost": shiok_cost, "start_date": shiok_start_date}
+    
+    # Calculate exact dates for display
+    def fmt(d): return d.strftime("%d %b")
+    
+    l_start = h_date + timedelta(days=lobang_plan['start'])
+    l_end = h_date + timedelta(days=lobang_plan['end'])
+    
+    s_end = shiok_start_date + timedelta(days=8)
+
+    return {
+        "lobang": {
+            "range": f"{fmt(l_start)} - {fmt(l_end)}",
+            "leaves": lobang_plan['cost'],
+            "off": lobang_plan['off'],
+            "type": lobang_plan['name']
+        },
+        "shiok": {
+            "range": f"{fmt(shiok_start_date)} - {fmt(s_end)}",
+            "leaves": shiok_cost,
             "off": 9,
-            "range": f"{sat_before.strftime('%d %b')} - {sun_after.strftime('%d %b')}",
-            "note": "Maximize 9-Day Block"
+            "type": "Maximize Block"
         }
-    else:
-        # Fallback: Just a long weekend
-        # If holiday is Fri/Mon -> 3 days. If Tue/Thu -> Take 1 to make 4.
-        wd = h_date.weekday()
-        if wd == 1: # Tue -> Take Mon
-            return {"leaves": 1, "off": 4, "range": f"{(h_date-timedelta(days=3)).strftime('%d %b')} - {h_date.strftime('%d %b')}", "note": "4-Day Long Weekend"}
-        elif wd == 3: # Thu -> Take Fri
-            return {"leaves": 1, "off": 4, "range": f"{h_date.strftime('%d %b')} - {(h_date+timedelta(days=3)).strftime('%d %b')}", "note": "4-Day Long Weekend"}
-        
-        return {"leaves": 0, "off": 3, "range": "Long Weekend", "note": "Standard Break"}
+    }
 
 # --- 3. ROUTES ---
 
@@ -146,11 +155,10 @@ def plan_trip():
     leaves_balance = int(data.get('leavesLeft', 14))
     
     # Locations
-    f_lat = data['from']['latitude']
-    f_lng = data['from']['longitude']
-    t_lat = data['to']['latitude']
-    t_lng = data['to']['longitude']
-    city_name = data['to']['name'] # e.g. "Tokyo"
+    f_lat, f_lng = data['from']['latitude'], data['from']['longitude']
+    t_lat, t_lng = data['to']['latitude'], data['to']['longitude']
+    city = data['to']['name']
+    country = data['to'].get('country', '')
 
     # 1. Weather
     try:
@@ -159,7 +167,7 @@ def plan_trip():
         weather = f"{w_data['current_weather']['temperature']}°C"
     except: weather = "N/A"
 
-    # 2. Budget (Haversine)
+    # 2. Budget
     try:
         R = 6371
         dlat, dlon = radians(t_lat - f_lat), radians(t_lng - f_lng)
@@ -172,36 +180,23 @@ def plan_trip():
         else: budget = "High ($$$)"
     except: dist_km, budget = 0, "-"
 
-    # 3. Guide (Wikivoyage)
-    guide = get_wikivoyage(city_name)
-    if not guide: 
-        # Ultimate fallback
-        guide = {
-            "see": [{"title": "Explore City", "desc": f"Discover the main sights of {city_name}."}], 
-            "eat": [{"title": "Local Eats", "desc": "Try the famous local dishes."}]
-        }
+    # 3. Guide (New Logic)
+    guide = get_wikivoyage(city, country, t_lat, t_lng)
 
-    # 4. Holiday Logic (The "AI")
+    # 4. Holidays
     try:
         h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
         h_data = requests.get(h_url).json()
         holidays = []
         
         for h in h_data:
-            # Run the optimizer for each holiday
-            plan = optimize_leave(h['date'], leaves_balance)
-            
+            strategies = calculate_strategies(h['date'], leaves_balance)
             holidays.append({
                 "name": h['localName'],
                 "date": datetime.strptime(h['date'], "%Y-%m-%d").strftime("%d %b"),
-                "range": plan['range'],
-                "leaves": plan['leaves'],
-                "off": plan['off'],
-                "note": plan['note']
+                "strategies": strategies
             })
-    except Exception as e:
-        print(e)
-        holidays = []
+    except: holidays = []
 
     return jsonify({
         "weather": weather,
