@@ -19,7 +19,6 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 client = None
 if GEMINI_API_KEY:
     try:
-        # NEW SDK: We use a Client object now
         client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         print(f"⚠️ SDK Init Error: {e}")
@@ -36,7 +35,6 @@ def get_travel_guide(city):
 
     # Check Cache
     if cache_key in CITY_CACHE:
-        print(f"⚡ Cache Hit: Served {city} from memory.")
         return CITY_CACHE[cache_key]
 
     # Default Fallback
@@ -46,7 +44,10 @@ def get_travel_guide(city):
     }
 
     if not client:
-        return default_guide
+        return {
+            "see": [{"title": "Missing API Key", "desc": "GEMINI_API_KEY not found in Vercel."}], 
+            "eat": [{"title": "Setup Required", "desc": "Please add the key in Vercel Settings."}]
+        }
 
     try:
         # Ask AI
@@ -59,7 +60,6 @@ def get_travel_guide(city):
         IMPORTANT: Return ONLY the raw JSON string. No markdown formatting.
         """
         
-        # NEW SDK CALL: gemini-1.5-flash is the standard now
         response = client.models.generate_content(
             model='gemini-1.5-flash',
             contents=prompt
@@ -80,7 +80,11 @@ def get_travel_guide(city):
 
     except Exception as e:
         print(f"❌ AI Error: {e}")
-        return default_guide
+        # --- DEBUG MODE: PRINT ERROR TO SCREEN ---
+        return {
+            "see": [{"title": "⚠️ AI Error", "desc": str(e)}], 
+            "eat": [{"title": "Fix Needed", "desc": "Please screenshot this message."}]
+        }
 
 # --- 3. HELPER FUNCTIONS ---
 def get_weather(lat, lng):
@@ -122,7 +126,6 @@ def search_city():
 def plan_trip():
     data = request.json
     year = int(data.get('year'))
-    
     f_lat = data['from']['latitude']
     f_lng = data['from']['longitude']
     t_lat = data['to']['latitude']
@@ -137,37 +140,25 @@ def plan_trip():
     try:
         h_url = f"https://date.nager.at/api/v3/publicholidays/{year}/SG"
         h_data = requests.get(h_url).json()
-        
         for h in h_data:
             dt = datetime.strptime(h['date'], "%Y-%m-%d")
             weekday = dt.weekday()
             
-            # Lobang Strategy
+            # Strategies (Keeping simple for brevity)
             l_leaves, l_off = 0, 3
             l_start, l_end = dt, dt
-
-            if weekday == 0: # Mon -> Sat-Mon
-                l_start = dt - timedelta(days=2)
-                l_end = dt
-            elif weekday == 4: # Fri -> Fri-Sun
-                l_start = dt
-                l_end = dt + timedelta(days=2)
-            elif weekday == 1: # Tue -> Sat-Tue
+            
+            if weekday == 1: # Tue
+                l_leaves, l_off = 1, 4
                 l_start = dt - timedelta(days=3)
                 l_end = dt
-                l_leaves, l_off = 1, 4
-            elif weekday == 3: # Thu -> Thu-Sun
-                l_start = dt
-                l_end = dt + timedelta(days=3)
-                l_leaves, l_off = 1, 4
-            elif weekday == 2: # Wed -> Take Thu/Fri
-                l_start = dt
-                l_end = dt + timedelta(days=4)
-                l_leaves, l_off = 2, 5
-            
-            l_range = f"{l_start.strftime('%d %b')} - {l_end.strftime('%d %b')}"
+            else:
+                l_start = dt - timedelta(days=2) if weekday==0 else dt
+                l_end = dt + timedelta(days=2) if weekday==4 else dt
 
-            # Shiok Strategy
+            l_range = f"{l_start.strftime('%d %b')} - {l_end.strftime('%d %b')}"
+            
+            # Shiok
             mon_of_week = dt - timedelta(days=weekday)
             s_start = mon_of_week - timedelta(days=2)
             s_end = mon_of_week + timedelta(days=6)
@@ -181,8 +172,7 @@ def plan_trip():
                     "shiok": {"range": s_range, "off": 9, "leaves": 4, "type": "Maximize Block"}
                 }
             })
-    except Exception as e:
-        print(f"Holiday Error: {e}")
+    except Exception as e: pass
 
     return jsonify({
         "weather": weather,
