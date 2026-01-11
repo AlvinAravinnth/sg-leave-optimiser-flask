@@ -1,3 +1,5 @@
+document.getElementById('dashboard').classList.remove('hidden');
+
 let selectedCity = null;
 
 // Listen for typing in the Search Box
@@ -78,3 +80,4 @@ function renderItinerary(itin) {
         eat.innerHTML += `<div class="guide-item"><b>${i.title}</b><p>${i.desc}</p></div>`;
     });
 }
+
